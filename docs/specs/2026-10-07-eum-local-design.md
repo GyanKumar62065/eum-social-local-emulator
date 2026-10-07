@@ -145,8 +145,9 @@ eum-local/
    share a path, e.g. `GET /v1/whatsapp/template` vs `POST /v1/whatsapp/template`) to an
    operation. Unknown route → 404 `UnknownOperationException`-style error with the AWS header.
 2. **Auth** — require an `Authorization` header starting with `AWS4-HMAC-SHA256`; signature is
-   **not** verified. Region is taken from the credential scope; account id from config
-   (default `000000000000`). Missing header → 403 `AccessDeniedException`.
+   **not** verified. Region and account id used in ARNs come from config (defaults
+   `ap-south-1`, `000000000000`) so seeded ARNs are stable; the credential-scope region is
+   ignored. Missing header → 403 `AccessDeniedException`.
 3. **Bind** — build the input object from `@httpQuery` members and the JSON body; blobs arrive
    base64 in JSON and are decoded.
 4. **Validate** — walk the input shape and apply constraint traits. First violation →
@@ -176,15 +177,20 @@ Database file defaults to `./data/eum-local.db`; `EUM_DB=:memory:` for tests/CI.
 
 | Table | Key columns |
 |---|---|
-| `waba` | `id` (AWS id, `waba-<32 hex>`), `arn`, `meta_waba_id`, `name`, `registration_status`, `link_date`, `event_destinations_json` |
-| `phone_number` | `id` (`phone-number-id-<32 hex>`), `arn`, `waba_id`, `meta_phone_number_id`, `phone_number` (E.164), `display_phone_number`, `display_name`, `quality_rating`, `data_localization_region` |
+| `waba` | `id` (AWS id, `waba-<32 hex>`), `arn`, `meta_waba_id`, `name`, `registration_status`, `link_date`, `event_destinations`, `associate_token` |
+| `phone_number` | `id` (`phone-number-id-<32 hex>`), `arn`, `waba_id`, `meta_phone_number_id`, `phone_number` (E.164), `display_phone_number`, `display_name`, `quality_rating`, `data_localization_region`, `call_settings` |
 | `template` | `meta_template_id`, `waba_id`, `name`, `language`, `category`, `status` (`PENDING`/`APPROVED`/`REJECTED`/`PAUSED`/`DISABLED`), `components_json`, `created_at`, `updated_at` |
-| `message` | `aws_message_id`, `wamid`, `phone_number_id`, `direction` (`out`/`in`), `peer` (customer E.164), `type`, `body_json`, `rendered_text`, `status`, `error_code`, `created_at` |
+| `message` | `wamid`, `aws_message_id`, `phone_number_id`, `direction` (`out`/`in`), `peer` (customer E.164), `type`, `body`, `rendered_text`, `category`, `status`, `error_code`, `error_title`, `created_at` |
 | `message_status` | `wamid`, `status`, `error_code`, `at` |
-| `conversation_window` | (`phone_number_id`, `peer`) → `last_inbound_at` |
-| `media` | `media_id`, `phone_number_id`, `mime_type`, `sha256`, `bytes` (BLOB), `created_at` |
+| `media` | `media_id`, `owner_id` (phone-number id, or WABA id for template media), `mime_type`, `sha256`, `bytes` (BLOB), `created_at` |
 | `tag` | `resource_arn`, `key`, `value` |
 | `event` | `id`, `kind` (`status`/`inbound`/`template_status`), `envelope_json`, `destinations_json`, `delivery_result_json`, `at` |
+
+The 24-hour window is derived (latest inbound `message.created_at` for the phone number + peer),
+not stored. **AWS ids are derived from Meta ids** (`waba-` / `phone-number-id-` + first 32 hex of
+SHA-256 of the Meta id), so they are identical across restarts and `reset` — app config that
+names a `phone-number-id-…` keeps working. Schema is created with `CREATE TABLE IF NOT EXISTS`
+(no migration framework in v1).
 
 ARN formats follow the AWS docs example:
 `arn:aws:social-messaging:<region>:<account>:waba/<id>` and
@@ -201,8 +207,8 @@ config, loaded (idempotently, by `meta_waba_id`) at startup:
 # eum-local.yaml
 region: ap-south-1
 accountId: "000000000000"
-sns:
-  endpoint: http://localstack:4566       # omit to disable the SNS sink
+aws:
+  endpoint: http://localstack:4566       # SNS sink + S3 media; omit to disable both
 wabas:
   - name: Kapittx Dev
     metaWabaId: "100000000000001"
@@ -235,8 +241,11 @@ messageIdMode: uuid              # uuid | wamid  (see §10)
 
 `Associate` is also accepted (any `signupCallback`/`setupFinalization` input that validates)
 and creates a WABA with generated ids, so tests can create WABAs through the API.
-`Disassociate` removes the WABA and its phone numbers; later sends from those numbers →
-`ResourceNotFoundException`. `Get`/`List` paginate with an opaque base64 `nextToken`.
+Seeded WABAs must give `metaWabaId`, and each phone number `metaPhoneNumberId` (digits), so ids
+stay stable. `Disassociate` removes the WABA, its phone numbers and their messages; later sends
+from those numbers → `ResourceNotFoundException`. `PutWhatsAppBusinessAccountEventDestinations`
+on an unknown WABA → `InvalidParametersException` (the model does not list `ResourceNotFound`
+for that operation). `Get`/`List` paginate with an opaque base64 `nextToken`.
 
 ### 6.2 SendWhatsAppMessage
 
@@ -310,7 +319,7 @@ the UI; they never fail the API call that caused them. No retries in v1.
 - `Create` stores with status `PENDING`; a scheduler moves it to `APPROVED` after
   `autoApproveSeconds` (or never, when `-1`). Approve/reject via admin API or UI; each change
   emits a `message_template_status_update` event.
-- `CreateFromLibrary` copies from a built-in library of ~10 Meta utility templates
+- `CreateFromLibrary` copies from a small built-in library of Meta utility templates
   (`src/services/socialmessaging/library.json`), which `ListWhatsAppTemplateLibrary` also lists.
 - `Update` re-sets status to `PENDING` (Meta re-reviews edits). `Delete` by name or id.
 - Name rules enforced: lowercase, digits, underscores, ≤ 512 chars; duplicate name+language
@@ -329,7 +338,8 @@ the UI; they never fail the API call that caused them. No retries in v1.
 
 ### 6.6 Tags
 
-Generic key/value storage per resource ARN; unknown ARN → `ResourceNotFoundException`.
+Generic key/value storage per resource ARN (WABA and phone-number ARNs); unknown ARN →
+`InvalidParametersException` (the tagging operations do not declare `ResourceNotFound`).
 
 ## 7. Admin API (`/_eum/api`)
 
