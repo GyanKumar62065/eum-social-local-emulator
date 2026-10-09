@@ -9,7 +9,7 @@ await app.fastify.listen({ port: config.port, host: config.host })
 const base = `http://localhost:${config.port}`
 const result = coverage(app.model, app.handlers)
 const lines = [
-  '', 'eum-local — AWS End User Messaging Social emulator',
+  '', 'EUM Social Local Emulator — AWS End User Messaging Social',
   `  SDK endpoint : ${base}`, `  Inbox        : ${base}/_eum/ui/`,
   `  Operations   : ${result.simulated.length} simulated, ${result.notSimulated.length} routed but not simulated`,
   `  Events       : ${config.aws ? `SNS via ${config.aws.endpoint}` : 'stored only (no aws.endpoint configured)'}`, '',

@@ -1,4 +1,4 @@
-# eum-local Implementation Plan
+# EUM Social Local Emulator Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -8,7 +8,7 @@
 
 **Tech Stack:** Node ≥ 24, TypeScript (type-check only), Fastify 5, `node:sqlite`, `yaml`, `@aws-sdk/client-sns`, `@aws-sdk/client-s3`, `@fastify/static`; tests: vitest, `@aws-sdk/client-socialmessaging`, `@aws-sdk/client-sqs`; UI: Preact + Vite.
 
-**Spec:** `docs/specs/2026-10-07-eum-local-design.md`
+**Spec:** `docs/specs/2026-10-07-eum-social-local-emulator-design.md`
 
 ## Global Constraints
 
@@ -17,7 +17,7 @@
 - Defaults: region `ap-south-1`, account `000000000000`, DB `./data/eum-local.db` (`EUM_DB=:memory:` for tests).
 - Model file: `models/socialmessaging-2024-01-01.json`, provenance in `models/SOURCE`.
 - AWS errors: HTTP status from the model's `@httpError`, header `x-amzn-ErrorType: <Name>`, body `{"message": "..."}`, plus `x-amzn-RequestId` on every `/v1` response. A handler may only throw error types declared on its operation (or the service-level `AccessDeniedException`, `ValidationException`).
-- Not-simulated operations: HTTP **501**, `InternalServiceException`, message `eum-local: <OperationName> is not simulated yet`.
+- Not-simulated operations: HTTP **501**, `InternalServiceException`, message `eum-social-local-emulator: <OperationName> is not simulated yet`.
 - AWS ids derive from Meta ids: `waba-` / `phone-number-id-` + first 32 hex chars of SHA-256 of `waba:<metaId>` / `phone:<metaId>`.
 - Event envelope fields exactly: `context.MetaWabaIds[{wabaId, arn}]`, `context.MetaPhoneNumberIds[{metaPhoneNumberId, arn}]`, `whatsAppWebhookEntry` (JSON **string**), `aws_account_id`, `message_timestamp` (ISO with 9 fractional digits), `messageId`.
 - Meta error codes used: 131026, 131047, 131049, 131050, 132000, 132001.
@@ -54,7 +54,7 @@
 `package.json`:
 ```json
 {
-  "name": "eum-local",
+  "name": "eum-social-local-emulator",
   "version": "0.1.0",
   "private": true,
   "description": "Local emulator for AWS End User Messaging Social (WhatsApp)",
@@ -234,7 +234,7 @@ export class SmithyModel {
   constructor(json: { shapes: Record<string, Shape> }) {
     this.shapes = json.shapes
     const service = Object.entries(this.shapes).find(([, s]) => s.type === 'service')
-    if (!service) throw new Error('eum-local: model has no service shape')
+    if (!service) throw new Error('eum-social-local-emulator: model has no service shape')
     this.namespace = service[0].slice(0, service[0].indexOf('#'))
     const serviceErrors = (service[1].errors ?? []).map((e) => shortName(e.target))
     this.operations = new Map()
@@ -258,7 +258,7 @@ export class SmithyModel {
 
   shape(id: string): Shape {
     const s = this.shapes[id] ?? PRELUDE[id]
-    if (!s) throw new Error(`eum-local: unknown shape ${id}`)
+    if (!s) throw new Error(`eum-social-local-emulator: unknown shape ${id}`)
     return s
   }
 
@@ -282,7 +282,7 @@ const REPO = 'aws/api-models-aws'
 const PATH = 'models/socialmessaging/service/2024-01-01/socialmessaging-2024-01-01.json'
 
 const commitsRes = await fetch(`https://api.github.com/repos/${REPO}/commits?path=${encodeURIComponent(PATH)}&per_page=1`, {
-  headers: { 'user-agent': 'eum-local' },
+  headers: { 'user-agent': 'eum-social-local-emulator' },
 })
 const commits = await commitsRes.json()
 if (!Array.isArray(commits) || !commits[0]) {
@@ -442,11 +442,11 @@ export function buildRouter(model: SmithyModel): Router {
   const table = new Map<string, Operation>()
   for (const op of model.operations.values()) {
     if (op.uri.includes('{')) {
-      throw new Error(`eum-local: ${op.name} uses an HTTP label (${op.uri}); label routing is not implemented`)
+      throw new Error(`eum-social-local-emulator: ${op.name} uses an HTTP label (${op.uri}); label routing is not implemented`)
     }
     const key = `${op.method} ${op.uri.split('?')[0]}`
     const existing = table.get(key)
-    if (existing) throw new Error(`eum-local: ambiguous route ${key} (${existing.name}, ${op.name})`)
+    if (existing) throw new Error(`eum-social-local-emulator: ambiguous route ${key} (${existing.name}, ${op.name})`)
     table.set(key, op)
   }
   return {
@@ -799,7 +799,7 @@ git commit -m "feat: Smithy constraint validator and AWS error type"
 ### Task 4: Config, ids, SQLite store and seeding
 
 **Files:**
-- Create: `src/config.ts`, `src/domain/ids.ts`, `src/domain/metaErrors.ts`, `src/domain/paging.ts`, `src/store/types.ts`, `src/store/db.ts`, `src/store/wabas.ts`, `src/store/templates.ts`, `src/store/messages.ts`, `src/store/media.ts`, `src/store/tags.ts`, `src/store/events.ts`, `src/store/seed.ts`, `eum-local.example.yaml`
+- Create: `src/config.ts`, `src/domain/ids.ts`, `src/domain/metaErrors.ts`, `src/domain/paging.ts`, `src/store/types.ts`, `src/store/db.ts`, `src/store/wabas.ts`, `src/store/templates.ts`, `src/store/messages.ts`, `src/store/media.ts`, `src/store/tags.ts`, `src/store/events.ts`, `src/store/seed.ts`, `eum-social-local-emulator.example.yaml`
 - Test: `test/config.test.ts`, `test/store/store.test.ts`
 
 **Interfaces:**
@@ -1020,7 +1020,7 @@ export interface Config {
 
 export function parseConfig(text: string | undefined, env: Record<string, string | undefined>, source = '(defaults)'): Config {
   const fail = (msg: string): never => {
-    throw new Error(`eum-local config ${source}: ${msg}`)
+    throw new Error(`eum-social-local-emulator config ${source}: ${msg}`)
   }
   const raw: any = text ? (parse(text) ?? {}) : {}
   if (typeof raw !== 'object' || Array.isArray(raw)) fail('top level must be a mapping')
@@ -1078,8 +1078,8 @@ export function parseConfig(text: string | undefined, env: Record<string, string
 }
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
-  if (env.EUM_CONFIG && !existsSync(env.EUM_CONFIG)) throw new Error(`eum-local config ${env.EUM_CONFIG}: file not found`)
-  const path = env.EUM_CONFIG ?? (existsSync('eum-local.yaml') ? 'eum-local.yaml' : undefined)
+  if (env.EUM_CONFIG && !existsSync(env.EUM_CONFIG)) throw new Error(`eum-social-local-emulator config ${env.EUM_CONFIG}: file not found`)
+  const path = env.EUM_CONFIG ?? (existsSync('eum-social-local-emulator.yaml') ? 'eum-social-local-emulator.yaml' : undefined)
   return parseConfig(path ? readFileSync(path, 'utf8') : undefined, env, path)
 }
 ```
@@ -1805,9 +1805,9 @@ export function seedFromConfig(db: Db, config: Config, now: number): void {
 
 - [ ] **Step 8: Write the example config**
 
-`eum-local.example.yaml`:
+`eum-social-local-emulator.example.yaml`:
 ```yaml
-# eum-local configuration. Copy to eum-local.yaml (or point EUM_CONFIG at it).
+# eum-social-local-emulator configuration. Copy to eum-social-local-emulator.yaml (or point EUM_CONFIG at it).
 region: ap-south-1
 accountId: "000000000000"
 
@@ -1817,13 +1817,13 @@ aws:
   endpoint: http://localhost:4566
 
 wabas:
-  - name: Kapittx Dev
+  - name: Example Business
     metaWabaId: "100000000000001"
     eventDestinations:
       - arn:aws:sns:ap-south-1:000000000000:eum-whatsapp-events
     phoneNumbers:
       - phoneNumber: "+919800000001"
-        displayName: Kapittx
+        displayName: Example Sender
         metaPhoneNumberId: "200000000000001"
     templates:
       - name: invoice_reminder
@@ -1856,7 +1856,7 @@ Expected: all PASS.
 - [ ] **Step 10: Commit**
 
 ```bash
-git add src/config.ts src/domain src/store eum-local.example.yaml test/config.test.ts test/store
+git add src/config.ts src/domain src/store eum-social-local-emulator.example.yaml test/config.test.ts test/store
 git commit -m "feat: config, stable ids, SQLite store and seeding"
 ```
 
@@ -2045,7 +2045,7 @@ export class RealClock implements Clock {
       this.timers.delete(t)
       Promise.resolve()
         .then(fn)
-        .catch((err) => console.error('eum-local: scheduled task failed', err))
+        .catch((err) => console.error('eum-social-local-emulator: scheduled task failed', err))
     }, ms)
     this.timers.add(t)
   }
@@ -2268,7 +2268,7 @@ export class EventBus {
       try {
         fn(e)
       } catch (err) {
-        this.o.log.error({ err }, 'eum-local: bus subscriber failed')
+        this.o.log.error({ err }, 'eum-social-local-emulator: bus subscriber failed')
       }
     }
   }
@@ -2900,10 +2900,10 @@ import { FakeClock } from '../src/sim/clock.ts'
 
 export const TEST_TOPIC = 'arn:aws:sns:ap-south-1:000000000000:eum-events'
 export const TEST_SEED: WabaSeed = {
-  name: 'Kapittx Test',
+  name: 'Example Business',
   metaWabaId: '100000000000001',
   eventDestinations: [TEST_TOPIC],
-  phoneNumbers: [{ phoneNumber: '+919800000001', displayName: 'Kapittx', metaPhoneNumberId: '200000000000001' }],
+  phoneNumbers: [{ phoneNumber: '+919800000001', displayName: 'Example Sender', metaPhoneNumberId: '200000000000001' }],
   templates: [
     { name: 'invoice_reminder', language: 'en', category: 'UTILITY', components: [{ type: 'BODY', text: 'Hi {{1}}, invoice {{2}} of {{3}} is due on {{4}}.' }] },
   ],
@@ -3131,7 +3131,7 @@ export function registerAwsApi(app: FastifyInstance, model: SmithyModel, handler
         reply.header('x-amzn-requestid', randomUUID())
         const url = new URL(req.url, 'http://local')
         const op = router.match(req.method, url.pathname)
-        if (!op) return sendError(reply, 404, 'UnknownOperationException', `eum-local: no operation for ${req.method} ${url.pathname}`)
+        if (!op) return sendError(reply, 404, 'UnknownOperationException', `eum-social-local-emulator: no operation for ${req.method} ${url.pathname}`)
         if (!String(req.headers.authorization ?? '').startsWith('AWS4-HMAC-SHA256')) {
           return sendError(reply, 403, 'AccessDeniedException', 'Missing Authentication Token: requests must be signed with AWS SigV4')
         }
@@ -3148,7 +3148,7 @@ export function registerAwsApi(app: FastifyInstance, model: SmithyModel, handler
         const violations = validate(model, op.input, input)
         if (violations.length) return sendError(reply, 400, 'ValidationException', validationMessage(violations))
         const handler = handlers[op.name]
-        if (!handler) return sendError(reply, 501, 'InternalServiceException', `eum-local: ${op.name} is not simulated yet`)
+        if (!handler) return sendError(reply, 501, 'InternalServiceException', `eum-social-local-emulator: ${op.name} is not simulated yet`)
         try {
           const out = await handler(input, ctx)
           return reply.code(200).type('application/json').send(JSON.stringify(toJson(model, op.output, out) ?? {}))
@@ -3156,10 +3156,10 @@ export function registerAwsApi(app: FastifyInstance, model: SmithyModel, handler
           if (err instanceof AwsError && op.errors.includes(err.type)) {
             return sendError(reply, err.status ?? model.errorStatus(err.type), err.type, err.message)
           }
-          req.log.error({ err, operation: op.name }, 'eum-local: handler failed')
+          req.log.error({ err, operation: op.name }, 'eum-social-local-emulator: handler failed')
           const message = err instanceof AwsError
-            ? `eum-local bug: ${op.name} raised undeclared ${err.type}: ${err.message}`
-            : 'eum-local internal error; see the server log'
+            ? `eum-social-local-emulator bug: ${op.name} raised undeclared ${err.type}: ${err.message}`
+            : 'eum-social-local-emulator internal error; see the server log'
           return sendError(reply, 500, 'InternalServiceException', message)
         }
       },
@@ -3294,7 +3294,7 @@ describe('WABA operations', () => {
   it('lists and gets the seeded WABA with its phone numbers', async () => {
     const list = await h.client.send(new ListLinkedWhatsAppBusinessAccountsCommand({}))
     expect(list.linkedAccounts).toHaveLength(1)
-    expect(list.linkedAccounts![0]).toMatchObject({ id: WABA_ID, wabaId: '100000000000001', registrationStatus: 'COMPLETE', wabaName: 'Kapittx Test', eventDestinations: [{ eventDestinationArn: TEST_TOPIC }] })
+    expect(list.linkedAccounts![0]).toMatchObject({ id: WABA_ID, wabaId: '100000000000001', registrationStatus: 'COMPLETE', wabaName: 'Example Business', eventDestinations: [{ eventDestinationArn: TEST_TOPIC }] })
     expect(list.linkedAccounts![0].linkDate).toBeInstanceOf(Date)
 
     const got = await h.client.send(new GetLinkedWhatsAppBusinessAccountCommand({ id: list.linkedAccounts![0].arn! }))
@@ -3309,7 +3309,7 @@ describe('WABA operations', () => {
 
   it('gets and updates a phone number', async () => {
     const got = await h.client.send(new GetLinkedWhatsAppBusinessAccountPhoneNumberCommand({ id: PHONE_ID }))
-    expect(got).toMatchObject({ linkedWhatsAppBusinessAccountId: WABA_ID, phoneNumber: { displayPhoneNumberName: 'Kapittx' } })
+    expect(got).toMatchObject({ linkedWhatsAppBusinessAccountId: WABA_ID, phoneNumber: { displayPhoneNumberName: 'Example Sender' } })
     const upd = await h.client.send(new UpdateLinkedWhatsAppBusinessAccountPhoneNumberCommand({ id: PHONE_ID, callSettings: { callEnabled: true } }))
     expect(upd.phoneNumberId).toBe(PHONE_ID)
     expect((await h.client.send(new GetLinkedWhatsAppBusinessAccountPhoneNumberCommand({ id: PHONE_ID }))).callSettings).toEqual({ callEnabled: true })
@@ -3424,7 +3424,7 @@ export function requirePhone(ctx: Ctx, idOrArn: string): { phone: PhoneRow; waba
 }
 
 export const wabaHandlers: HandlerMap = {
-  // Real AWS only allows this from the console; eum-local accepts it so tests can create WABAs.
+  // Real AWS only allows this from the console; eum-social-local-emulator accepts it so tests can create WABAs.
   AssociateWhatsAppBusinessAccount(input, ctx) {
     if (input.signupCallback) {
       const metaWabaId = metaNumericId()
@@ -4676,7 +4676,7 @@ export async function registerUi(app: FastifyInstance): Promise<void> {
   app.get('/', (_req, reply) => reply.redirect('/_eum/ui/'))
   app.get('/_eum/ui', (_req, reply) => reply.redirect('/_eum/ui/'))
   if (!existsSync(`${root}index.html`)) {
-    app.get('/_eum/ui/*', (_req, reply) => reply.type('text/plain').send('The eum-local inbox is not built yet. Run: npm run ui:build'))
+    app.get('/_eum/ui/*', (_req, reply) => reply.type('text/plain').send('The eum-social-local-emulator inbox is not built yet. Run: npm run ui:build'))
     return
   }
   await app.register(fastifyStatic, { root, prefix: '/_eum/ui/' })
@@ -4703,7 +4703,7 @@ const base = `http://localhost:${config.port}`
 const cov = coverage(app.model, app.handlers)
 const lines = [
   '',
-  `eum-local — AWS End User Messaging Social emulator`,
+  `eum-social-local-emulator — AWS End User Messaging Social emulator`,
   `  SDK endpoint : ${base}`,
   `  Inbox        : ${base}/_eum/ui/`,
   `  Operations   : ${cov.simulated.length} simulated, ${cov.notSimulated.length} routed but not simulated`,
@@ -4751,7 +4751,7 @@ export default defineConfig({
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>eum-local inbox</title>
+    <title>eum-social-local-emulator inbox</title>
   </head>
   <body>
     <div id="app"></div>
@@ -4877,7 +4877,7 @@ export function App() {
   return (
     <div class="app">
       <header class="topbar">
-        <strong>eum-local</strong>
+        <strong>eum-social-local-emulator</strong>
         <span class="muted">AWS End User Messaging · WhatsApp</span>
         <nav>
           {(['inbox', 'templates', 'events'] as View[]).map((v) => (
@@ -5263,7 +5263,7 @@ Expected: Vite writes `ui/dist/index.html`; all tests PASS (the UI test now sees
 
 Run the server without LocalStack (strip the `aws:` block from the example config):
 ```bash
-sed '/^aws:/,/^$/d' eum-local.example.yaml > /tmp/eum-noaws.yaml
+sed '/^aws:/,/^$/d' eum-social-local-emulator.example.yaml > /tmp/eum-noaws.yaml
 EUM_CONFIG=/tmp/eum-noaws.yaml EUM_DB=:memory: npm start
 ```
 Expected: banner prints the SDK endpoint, inbox URL, "22 simulated, 16 routed but not simulated" and the WABA/phone ids. Open `http://localhost:4580/_eum/ui/`, use "Message as a customer", reply STOP, check the Events tab, then stop with Ctrl-C.
@@ -5284,7 +5284,7 @@ git commit -m "feat: WhatsApp inbox UI and CLI entry point"
 
 **Interfaces:**
 - Consumes: `buildApp` (Task 8+), `parseConfig` (Task 4), `RealClock` (Task 5), `TEST_SEED`-style seed
-- Produces: a runnable image `eum-local`, an opt-in e2e suite, an opt-in Java smoke test
+- Produces: a runnable image `eum-social-local-emulator`, an opt-in e2e suite, an opt-in Java smoke test
 
 - [ ] **Step 1: Write the end-to-end test**
 
@@ -5390,13 +5390,13 @@ RUN npm run ui:build
 
 FROM node:24-alpine
 WORKDIR /app
-ENV NODE_ENV=production EUM_DB=/data/eum-local.db EUM_CONFIG=/etc/eum-local/eum-local.yaml
+ENV NODE_ENV=production EUM_DB=/data/eum-local.db EUM_CONFIG=/etc/eum-social-local-emulator/eum-social-local-emulator.yaml
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY src ./src
 COPY models ./models
 COPY --from=build /app/ui/dist ./ui/dist
-COPY eum-local.example.yaml /etc/eum-local/eum-local.yaml
+COPY eum-social-local-emulator.example.yaml /etc/eum-social-local-emulator/eum-social-local-emulator.yaml
 RUN mkdir -p /data && chown node:node /data
 USER node
 EXPOSE 4580
@@ -5416,12 +5416,12 @@ QUEUE_URL=$(awslocal sqs create-queue --region "$REGION" --queue-name eum-whatsa
 QUEUE_ARN=$(awslocal sqs get-queue-attributes --region "$REGION" --queue-url "$QUEUE_URL" --attribute-names QueueArn --query Attributes.QueueArn --output text)
 awslocal sns subscribe --region "$REGION" --topic-arn "$TOPIC_ARN" --protocol sqs --notification-endpoint "$QUEUE_ARN" --attributes RawMessageDelivery=true
 awslocal s3 mb s3://eum-media --region "$REGION" || true
-echo "eum-local: topic $TOPIC_ARN -> queue $QUEUE_URL"
+echo "eum-social-local-emulator: topic $TOPIC_ARN -> queue $QUEUE_URL"
 ```
 
 `docker-compose.example.yml`:
 ```yaml
-# eum-local + LocalStack. Events land in the eum-whatsapp-events SQS queue.
+# eum-social-local-emulator + LocalStack. Events land in the eum-whatsapp-events SQS queue.
 services:
   localstack:
     image: localstack/localstack:4.11.1
@@ -5438,13 +5438,13 @@ services:
       interval: 5s
       retries: 30
 
-  eum-local:
+  eum-social-local-emulator:
     build: .
     ports: ["4580:4580"]
     environment:
       EUM_AWS_ENDPOINT: http://localstack:4566
     volumes:
-      - ./eum-local.example.yaml:/etc/eum-local/eum-local.yaml:ro
+      - ./eum-social-local-emulator.example.yaml:/etc/eum-social-local-emulator/eum-social-local-emulator.yaml:ro
       - eum-data:/data
     depends_on:
       localstack:
@@ -5463,12 +5463,12 @@ volumes:
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>local.eum</groupId>
-  <artifactId>eum-local-java-smoke</artifactId>
+  <artifactId>eum-social-local-emulator-java-smoke</artifactId>
   <version>1</version>
   <properties>
     <maven.compiler.release>17</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <!-- Same SDK version and transport as kapittx-api -->
+    <!-- Same SDK version and transport as sample application -->
     <aws.sdk.version>2.46.7</aws.sdk.version>
   </properties>
   <dependencies>
@@ -5553,7 +5553,7 @@ public class Smoke {
 
 `README.md`:
 ````markdown
-# eum-local
+# eum-social-local-emulator
 
 A local emulator for **AWS End User Messaging Social** (WhatsApp, service `socialmessaging`).
 Point the real AWS SDK at it with an endpoint override. It accepts the current AWS API, behaves
@@ -5561,14 +5561,14 @@ like WhatsApp after the call returns (template approval, sent → delivered → 
 failures, the 24-hour window, customer replies), and publishes the real EUM event envelope to
 SNS on LocalStack. A browser inbox shows every message and lets you reply as the customer.
 
-Design: [`docs/specs/2026-10-07-eum-local-design.md`](docs/specs/2026-10-07-eum-local-design.md)
+Design: [`docs/specs/2026-10-07-eum-social-local-emulator-design.md`](docs/specs/2026-10-07-eum-social-local-emulator-design.md)
 
 ## Quick start
 
 ```bash
 npm install
 npm run ui:build
-cp eum-local.example.yaml eum-local.yaml   # edit WABAs, numbers, templates, rules
+cp eum-social-local-emulator.example.yaml eum-social-local-emulator.yaml   # edit WABAs, numbers, templates, rules
 npm start                                  # http://localhost:4580
 ```
 
@@ -5592,7 +5592,7 @@ aws --endpoint-url http://localhost:4566 --region ap-south-1 sqs receive-message
 
 Any credentials work (the signature is not checked, but the request must be SigV4-signed).
 
-**Java (SDK v2)** — e.g. `kapittx-api`'s `WhatsAppProviderConfig`:
+**Java (SDK v2)** — configure the client endpoint as follows:
 
 ```java
 SocialMessagingClient.builder()
@@ -5603,8 +5603,8 @@ SocialMessagingClient.builder()
     .build();
 ```
 
-A suggested follow-up for `kapittx-api`: add an optional `aws.socialmessaging.endpoint` property
-and call `.endpointOverride(...)` only when it is set.
+Consumer applications can expose an optional endpoint setting and call
+`.endpointOverride(...)` only when it is set.
 
 **JavaScript (SDK v3)**:
 
@@ -5636,7 +5636,7 @@ event, the way real WhatsApp does:
 | Free-form message with no customer message in the last 24 h | 131047 |
 | A `sim.rules` entry matches | the rule's code |
 
-## Config reference (`eum-local.yaml`)
+## Config reference (`eum-social-local-emulator.yaml`)
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -5686,7 +5686,7 @@ Expected: unit/contract suites PASS; the e2e suite PASSes against LocalStack (or
 
 Then the Java smoke test against a running server:
 ```bash
-sed '/^aws:/,/^$/d' eum-local.example.yaml > /tmp/eum-noaws.yaml
+sed '/^aws:/,/^$/d' eum-social-local-emulator.example.yaml > /tmp/eum-noaws.yaml
 EUM_CONFIG=/tmp/eum-noaws.yaml EUM_DB=:memory: node src/main.ts &   # note the phone-number id in the banner
 mvn -q -f test/java/pom.xml compile exec:java -Dexec.args="http://localhost:4580 <phone-number-id from banner>"
 kill %1
@@ -5695,7 +5695,7 @@ Expected: prints `JAVA SMOKE OK`.
 
 - [ ] **Step 6: Docker image check**
 
-Run: `docker build -t eum-local . && docker run --rm -d -p 4581:4580 --name eum-smoke eum-local && sleep 3 && curl -fsS http://localhost:4581/_eum/health; docker rm -f eum-smoke`
+Run: `docker build -t eum-social-local-emulator . && docker run --rm -d -p 4581:4580 --name eum-smoke eum-social-local-emulator && sleep 3 && curl -fsS http://localhost:4581/_eum/health; docker rm -f eum-smoke`
 Expected: `{"status":"ok"}`.
 
 - [ ] **Step 7: Commit**

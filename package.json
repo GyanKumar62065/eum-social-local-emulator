@@ -1,15 +1,40 @@
 {
-  "name": "eum-local",
+  "name": "@gyankumar62065/eum-social-local-emulator",
   "version": "0.1.0",
-  "private": true,
-  "description": "Local emulator for AWS End User Messaging Social (WhatsApp)",
+  "publishConfig": {
+    "access": "restricted"
+  },
+  "packageManager": "bun@1.3.12",
+  "description": "Local development emulator for AWS End User Messaging Social",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GyanKumar62065/eum-social-local-emulator.git"
+  },
+  "homepage": "https://github.com/GyanKumar62065/eum-social-local-emulator#readme",
+  "bugs": {
+    "url": "https://github.com/GyanKumar62065/eum-social-local-emulator/issues"
+  },
   "type": "module",
+  "bin": {
+    "eum-social-local-emulator": "bin/eum-social-local-emulator.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "models/",
+    "ui/dist/",
+    "eum-social-local-emulator.example.yaml",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=24"
   },
   "scripts": {
     "start": "node src/main.ts",
     "dev": "node --watch src/main.ts",
+    "prepack": "bun run ui:build",
     "test": "vitest run",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "typecheck": "tsc --noEmit",

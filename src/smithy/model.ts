@@ -58,7 +58,7 @@ export class SmithyModel {
   constructor(json: { shapes: Record<string, Shape> }) {
     this.shapes = json.shapes
     const service = Object.entries(this.shapes).find(([, shape]) => shape.type === 'service')
-    if (!service) throw new Error('eum-local: model has no service shape')
+    if (!service) throw new Error('eum-social-local-emulator: model has no service shape')
     this.namespace = service[0].slice(0, service[0].indexOf('#'))
     const serviceErrors = (service[1].errors ?? []).map((error) => shortName(error.target))
     this.operations = new Map()
@@ -83,7 +83,7 @@ export class SmithyModel {
 
   shape(id: string): Shape {
     const shape = this.shapes[id] ?? PRELUDE[id]
-    if (!shape) throw new Error(`eum-local: unknown shape ${id}`)
+    if (!shape) throw new Error(`eum-social-local-emulator: unknown shape ${id}`)
     return shape
   }
 

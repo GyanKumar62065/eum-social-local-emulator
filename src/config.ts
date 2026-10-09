@@ -13,7 +13,7 @@ export interface Config {
 }
 
 export function parseConfig(text: string | undefined, env: Record<string, string | undefined>, source = '(defaults)'): Config {
-  const fail = (message: string): never => { throw new Error(`eum-local config ${source}: ${message}`) }
+  const fail = (message: string): never => { throw new Error(`eum-social-local-emulator config ${source}: ${message}`) }
   const raw: any = text ? (parse(text, { intAsBigInt: true }) ?? {}) : {}
   if (typeof raw !== 'object' || Array.isArray(raw)) fail('top level must be a mapping')
   const flow = (value: unknown, where: string): StatusName[] => {
@@ -60,7 +60,7 @@ export function parseConfig(text: string | undefined, env: Record<string, string
 }
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
-  if (env.EUM_CONFIG && !existsSync(env.EUM_CONFIG)) throw new Error(`eum-local config ${env.EUM_CONFIG}: file not found`)
-  const path = env.EUM_CONFIG ?? (existsSync('eum-local.yaml') ? 'eum-local.yaml' : undefined)
+  if (env.EUM_CONFIG && !existsSync(env.EUM_CONFIG)) throw new Error(`eum-social-local-emulator config ${env.EUM_CONFIG}: file not found`)
+  const path = env.EUM_CONFIG ?? (existsSync('eum-social-local-emulator.yaml') ? 'eum-social-local-emulator.yaml' : existsSync('eum-local.yaml') ? 'eum-local.yaml' : undefined)
   return parseConfig(path ? readFileSync(path, 'utf8') : undefined, env, path)
 }

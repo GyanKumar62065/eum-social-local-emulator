@@ -2,3 +2,7 @@ node_modules/
 data/
 ui/dist/
 test/java/target/
+
+# Local emulator configuration (may contain developer-specific seeds)
+eum-social-local-emulator.yaml
+eum-local.yaml

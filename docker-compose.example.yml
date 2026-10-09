@@ -1,4 +1,4 @@
-# eum-local + LocalStack. Events land in the eum-whatsapp-events SQS queue.
+# eum-social-local-emulator + LocalStack. Events land in the eum-whatsapp-events SQS queue.
 services:
   localstack:
     image: localstack/localstack:4.11.1
@@ -15,13 +15,13 @@ services:
       interval: 5s
       retries: 30
 
-  eum-local:
+  eum-social-local-emulator:
     build: .
     ports: ["4580:4580"]
     environment:
       EUM_AWS_ENDPOINT: http://localstack:4566
     volumes:
-      - ./eum-local.example.yaml:/etc/eum-local/eum-local.yaml:ro
+      - ./eum-social-local-emulator.example.yaml:/etc/eum-social-local-emulator/eum-social-local-emulator.yaml:ro
       - eum-data:/data
     depends_on:
       localstack:

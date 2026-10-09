@@ -21,7 +21,7 @@ export class EventBus {
   subscribe(fn: (event: BusEvent) => void): () => void { this.subscribers.add(fn); return () => this.subscribers.delete(fn) }
   notify(event: BusEvent): void {
     for (const fn of this.subscribers) {
-      try { fn(event) } catch (error) { this.o.log.error({ err: error }, 'eum-local: bus subscriber failed') }
+      try { fn(event) } catch (error) { this.o.log.error({ err: error }, 'eum-social-local-emulator: bus subscriber failed') }
     }
   }
   async emit(a: { kind: EventKind; waba: WabaRow; phone?: PhoneRow; wamid?: string; change: WebhookChange; now: number }): Promise<EventRow> {

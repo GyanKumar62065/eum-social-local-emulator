@@ -1,20 +1,23 @@
-FROM node:24-alpine AS build
+FROM oven/bun:1.3.12-alpine AS production-deps
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json bun.lock ./
+RUN bun install --production --frozen-lockfile
+
+FROM production-deps AS build
+RUN bun install --frozen-lockfile
 COPY ui ./ui
 COPY tsconfig.json ./
-RUN npm run ui:build
+RUN bun run ui:build
 
 FROM node:24-alpine
 WORKDIR /app
-ENV NODE_ENV=production EUM_DB=/data/eum-local.db EUM_CONFIG=/etc/eum-local/eum-local.yaml
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+ENV NODE_ENV=production EUM_DB=/data/eum-local.db EUM_CONFIG=/etc/eum-social-local-emulator/eum-social-local-emulator.yaml
+COPY package.json ./
+COPY --from=production-deps /app/node_modules ./node_modules
 COPY src ./src
 COPY models ./models
 COPY --from=build /app/ui/dist ./ui/dist
-COPY eum-local.example.yaml /etc/eum-local/eum-local.yaml
+COPY eum-social-local-emulator.example.yaml /etc/eum-social-local-emulator/eum-social-local-emulator.yaml
 RUN mkdir -p /data && chown node:node /data
 USER node
 EXPOSE 4580

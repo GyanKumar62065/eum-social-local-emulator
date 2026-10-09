@@ -8,7 +8,7 @@ export async function registerUi(app: FastifyInstance): Promise<void> {
   app.get('/', (_request, reply) => reply.redirect('/_eum/ui/'))
   app.get('/_eum/ui', (_request, reply) => reply.redirect('/_eum/ui/'))
   if (!existsSync(`${root}index.html`)) {
-    const hint = (_request: unknown, reply: { type(value: string): { send(value: string): unknown } }) => reply.type('text/plain').send('The eum-local inbox is not built yet. Run: npm run ui:build')
+    const hint = (_request: unknown, reply: { type(value: string): { send(value: string): unknown } }) => reply.type('text/plain').send('The inbox UI is not built yet. Run: bun run ui:build')
     app.get('/_eum/ui/', hint)
     app.get('/_eum/ui/*', hint)
     return

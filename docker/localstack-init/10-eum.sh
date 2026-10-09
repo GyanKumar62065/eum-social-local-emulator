@@ -7,4 +7,4 @@ QUEUE_URL=$(awslocal sqs create-queue --region "$REGION" --queue-name eum-whatsa
 QUEUE_ARN=$(awslocal sqs get-queue-attributes --region "$REGION" --queue-url "$QUEUE_URL" --attribute-names QueueArn --query Attributes.QueueArn --output text)
 awslocal sns subscribe --region "$REGION" --topic-arn "$TOPIC_ARN" --protocol sqs --notification-endpoint "$QUEUE_ARN" --attributes RawMessageDelivery=true
 awslocal s3 mb s3://eum-media --region "$REGION" || true
-echo "eum-local: topic $TOPIC_ARN -> queue $QUEUE_URL"
+echo "eum-social-local-emulator: topic $TOPIC_ARN -> queue $QUEUE_URL"

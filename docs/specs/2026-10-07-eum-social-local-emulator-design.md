@@ -1,4 +1,4 @@
-# eum-local — a local emulator for AWS End User Messaging
+# EUM Social Local Emulator — a local emulator for AWS End User Messaging
 
 - **Date:** 2026-10-07
 - **Status:** Draft, awaiting review
@@ -6,12 +6,10 @@
 
 ## 1. Problem and goal
 
-Kapittx sends WhatsApp through AWS End User Messaging Social (`kapittx-api` →
-`AWSWhatsAppServiceProvider` → `SocialMessagingClient.sendWhatsAppMessage`, SDK
-`software.amazon.awssdk:socialmessaging:2.46.7`), and `kai-backend` is planning a WhatsApp
-channel whose delivery/opt-out signals arrive as EUM events over SNS. Neither LocalStack nor
-any public library emulates EUM Social, so local development and CI today need a real AWS
-account, a real Meta WABA, and real phone numbers.
+Applications can send WhatsApp through AWS End User Messaging Social with the AWS SDK's
+`SocialMessagingClient.sendWhatsAppMessage` operation. Neither LocalStack nor a public library
+emulates EUM Social, so local development and CI otherwise need a real AWS account, a real Meta
+WABA, and real phone numbers.
 
 **Goal:** a local server that the *unmodified* AWS SDKs can talk to (only `endpointOverride`
 changes), which:
@@ -23,18 +21,18 @@ changes), which:
    so status, stats and suppression code paths run end to end.
 4. Gives developers a browser inbox to see what was "sent" and to act as the customer.
 
-**Who it is for:** Kapittx developers on their laptops and CI pipelines. Not a load-testing
+**Who it is for:** developers working locally and CI pipelines. Not a load-testing
 tool, not for production, no security boundary.
 
 ### Success criteria
 
 - `@aws-sdk/client-socialmessaging` (JS v3) and the Java SDK 2.46.7 can call every simulated
-  operation against eum-local with no code change besides endpoint + dummy credentials.
+  operation against eum-social-local-emulator with no code change besides endpoint + dummy credentials.
 - A `SendWhatsAppMessage` produces `sent → delivered → read` events on a LocalStack SNS topic,
   received by an SQS subscriber, with the envelope documented by AWS (§6.3).
 - A developer can open `/_eum/ui`, see the rendered message, and reply "STOP" as the customer,
   producing an inbound `messages` event on the same topic.
-- Upgrading to a newer AWS model (`npm run models:update`) exposes new operations as routed,
+- Upgrading to a newer AWS model (`bun run models:update`) exposes new operations as routed,
   validated endpoints without hand-written code.
 
 ## 2. Decisions taken (and why)
@@ -46,7 +44,7 @@ tool, not for production, no security boundary.
 | Implementation | TypeScript service **driven by the official AWS Smithy model** | "Latest interface" stays true by refreshing a model file, not by hand-checking SDK releases. |
 | Rejected: LocalStack extension | — | Couples to LocalStack internals and versions; hosting a UI is awkward; some extension features are Pro-only. |
 | Rejected: Spring Boot service | — | Every route and shape hand-written; drifts from AWS silently. |
-| Location | New repo `/Users/gyankumar/Works/eum-local` | Standalone tool used by several repos. |
+| Location | New repo `/Users/gyankumar/Works/eum-social-local-emulator` | Standalone tool used by several repos. |
 
 ## 3. The interface being emulated
 
@@ -66,7 +64,7 @@ Facts taken from the model:
 
 Note: the newest model has 7 operations the project's SDK 2.46.7 does not know
 (calling ×2, dataset/conversion ×2, business public key ×2, `UpdateLinkedWhatsAppBusinessAccountPhoneNumber`).
-That is expected; eum-local tracks AWS, not a particular SDK.
+That is expected; eum-social-local-emulator tracks AWS, not a particular SDK.
 
 ### 3.1 Operation coverage in v1
 
@@ -84,7 +82,7 @@ That is expected; eum-local tracks AWS, not a particular SDK.
 **Routed and validated, not simulated (16):** Flows ×10 (`Create/Get/GetPreview/List/Update/Publish/Deprecate/Delete WhatsAppFlow`, `ListWhatsAppFlowAssets`, `UpdateWhatsAppFlowAssets`), calling (`GetWhatsAppCallPermission`, `SendWhatsAppCallEvent`), datasets (`CreateWhatsAppDataset`, `SendWhatsAppConversionEvent`), `GetWhatsAppBusinessPublicKey`, `PutWhatsAppBusinessPublicKey`, and any operation added by a future model refresh.
 These validate input like any other operation, then return **HTTP 501** with
 `x-amzn-ErrorType: InternalServiceException` and message
-`eum-local: <OperationName> is not simulated yet`. Never a fake success.
+`eum-social-local-emulator: <OperationName> is not simulated yet`. Never a fake success.
 
 The exact simulated/not-simulated split is computed at startup (model operations minus
 registered handlers) and printed in the startup log and at `GET /_eum/api/coverage`.
@@ -101,12 +99,12 @@ One Node 24 LTS process, TypeScript, one port (default **4580**).
 | `/_eum/health` | Liveness/readiness |
 
 ```
-eum-local/
+eum-social-local-emulator/
   models/                 vendored Smithy JSON + SOURCE (upstream commit, date)
   scripts/update-models.ts
   src/
     server.ts             Fastify bootstrap, wires everything
-    config.ts             loads eum-local.yaml + env overrides
+    config.ts             loads eum-social-local-emulator.yaml + env overrides
     smithy/
       model.ts            loads the JSON AST, resolves shapes
       router.ts           builds (method, uri) → operation table from @http traits
@@ -160,7 +158,7 @@ eum-local/
 
 Handlers throw `AwsError(type, message)`; the error type must exist in the operation's
 `errors` list in the model, else it is reported as `InternalServiceException` and logged as
-an eum-local bug.
+an eum-social-local-emulator bug.
 
 ### 4.2 Adding SMS/Voice v2 later
 
@@ -204,19 +202,19 @@ ARN formats follow the AWS docs example:
 config, loaded (idempotently, by `meta_waba_id`) at startup:
 
 ```yaml
-# eum-local.yaml
+# eum-social-local-emulator.yaml
 region: ap-south-1
 accountId: "000000000000"
 aws:
   endpoint: http://localstack:4566       # SNS sink + S3 media; omit to disable both
 wabas:
-  - name: Kapittx Dev
+  - name: Example Business
     metaWabaId: "100000000000001"
     eventDestinations:
       - arn:aws:sns:ap-south-1:000000000000:eum-whatsapp-events
     phoneNumbers:
       - phoneNumber: "+919800000001"
-        displayName: Kapittx
+        displayName: Example Sender
         metaPhoneNumberId: "200000000000001"
     templates:
       - name: invoice_reminder
@@ -386,7 +384,7 @@ The AWS docs do not state whether `SendWhatsAppMessageOutput.messageId` equals M
 `wamid` (the `statuses[].id` in later events) or is a separate AWS id. This decides how
 callers correlate a send with its status events. Default `messageIdMode: uuid` returns a UUID
 and uses a separate wamid in events; `messageIdMode: wamid` returns the wamid. **Action:** one
-real send in the Kapittx AWS dev account, compare the response with the first status event,
+real send in an authorized AWS development account, compare the response with the first status event,
 then set the default to match and note the result here.
 
 ## 11. Testing
@@ -398,20 +396,20 @@ then set the default to match and note the result here.
   `EUM_DB=:memory:` and a fake clock; every simulated operation called through the real SDK,
   including error cases (assert the SDK surfaces the right exception class); one call to a
   not-simulated operation asserts the 501 `InternalServiceException`.
-- **End-to-end (opt-in, `npm run test:e2e`):** docker compose with LocalStack; create SNS
+- **End-to-end (opt-in, `bun run test:e2e`):** docker compose with LocalStack; create SNS
   topic → SQS subscription; send; assert `sent`, `delivered`, `read` envelopes arrive in SQS;
   post an inbound STOP; assert the inbound envelope.
 - **Java smoke (opt-in, `test/java/`):** a small Maven project on
-  `software.amazon.awssdk:socialmessaging:2.46.7` + `url-connection-client` (the same transport
-  `kapittx-api` uses) that sends one template message to eum-local.
-- **Model refresh check:** `npm run models:update` followed by the unit + contract suites;
+  `software.amazon.awssdk:socialmessaging:2.46.7` + `url-connection-client` that sends one
+  template message to the emulator.
+- **Model refresh check:** `bun run models:update` followed by the unit + contract suites;
   new upstream operations must appear as not-simulated without failing.
 
 ## 12. Packaging
 
 - `Dockerfile`: multi-stage, `node:24-alpine`, builds server + UI, runs as non-root,
-  `HEALTHCHECK` on `/_eum/health`, config at `/etc/eum-local/eum-local.yaml`, data volume at `/data`.
-- `docker-compose.example.yml`: eum-local + LocalStack (SNS, SQS, S3) + an init script that
+  `HEALTHCHECK` on `/_eum/health`, config at `/etc/eum-social-local-emulator/eum-social-local-emulator.yaml`, data volume at `/data`.
+- `docker-compose.example.yml`: eum-social-local-emulator + LocalStack (SNS, SQS, S3) + an init script that
   creates the example topic.
 - `README.md`: quick start, SDK snippets (JS, Java, Python/boto3) with `endpointOverride`
   and dummy credentials, config reference, limits.
@@ -423,6 +421,5 @@ then set the default to match and note the result here.
 - Amazon Connect event destinations, SNS retries/DLQs.
 - Flows, calling, datasets, business public key behaviour (routed + 501 only).
 - Meta rate limits, quality-rating changes, messaging-tier limits.
-- Wiring Kapittx apps to it. Follow-up for `kapittx-api`: an optional
-  `aws.socialmessaging.endpoint` property and `.endpointOverride(URI.create(...))` in
-  `WhatsAppProviderConfig` when set; documented in the README, not changed here.
+- Wiring application-specific code to it. Configure each SDK client with the local endpoint
+  override described in the README.

@@ -5,7 +5,7 @@ const REPO = 'aws/api-models-aws'
 const PATH = 'models/socialmessaging/service/2024-01-01/socialmessaging-2024-01-01.json'
 
 const commitsRes = await fetch(`https://api.github.com/repos/${REPO}/commits?path=${encodeURIComponent(PATH)}&per_page=1`, {
-  headers: { 'user-agent': 'eum-local' },
+  headers: { 'user-agent': 'eum-social-local-emulator' },
 })
 const commits = await commitsRes.json()
 if (!Array.isArray(commits) || !commits[0]) {

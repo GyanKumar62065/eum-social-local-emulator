@@ -6,7 +6,7 @@ export class RealClock implements Clock {
   schedule(ms: number, fn: () => void | Promise<void>): void {
     const timer = setTimeout(() => {
       this.timers.delete(timer)
-      Promise.resolve().then(fn).catch((error) => console.error('eum-local: scheduled task failed', error))
+      Promise.resolve().then(fn).catch((error) => console.error('eum-social-local-emulator: scheduled task failed', error))
     }, ms)
     this.timers.add(timer)
   }

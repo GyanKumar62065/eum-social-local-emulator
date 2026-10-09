@@ -8,13 +8,13 @@ afterEach(async () => { await h.close() })
 describe('WABA operations', () => {
   it('lists and gets the seeded WABA with its phone numbers', async () => {
     const list = await h.client.send(new ListLinkedWhatsAppBusinessAccountsCommand({})); expect(list.linkedAccounts).toHaveLength(1)
-    expect(list.linkedAccounts![0]).toMatchObject({ id: WABA_ID, wabaId: '100000000000001', registrationStatus: 'COMPLETE', wabaName: 'Kapittx Test', eventDestinations: [{ eventDestinationArn: TEST_TOPIC }] }); expect(list.linkedAccounts![0].linkDate).toBeInstanceOf(Date)
+    expect(list.linkedAccounts![0]).toMatchObject({ id: WABA_ID, wabaId: '100000000000001', registrationStatus: 'COMPLETE', wabaName: 'Example Business', eventDestinations: [{ eventDestinationArn: TEST_TOPIC }] }); expect(list.linkedAccounts![0].linkDate).toBeInstanceOf(Date)
     const got = await h.client.send(new GetLinkedWhatsAppBusinessAccountCommand({ id: list.linkedAccounts![0].arn! }))
     expect(got.account?.phoneNumbers).toEqual([expect.objectContaining({ phoneNumberId: PHONE_ID, phoneNumber: '+919800000001', metaPhoneNumberId: '200000000000001', qualityRating: 'GREEN' })])
   })
   it('paginates the account list', async () => { const page = await h.client.send(new ListLinkedWhatsAppBusinessAccountsCommand({ maxResults: 1 })); expect(page.linkedAccounts).toHaveLength(1); expect(page.nextToken).toBeUndefined() })
   it('gets and updates a phone number', async () => {
-    const got = await h.client.send(new GetLinkedWhatsAppBusinessAccountPhoneNumberCommand({ id: PHONE_ID })); expect(got).toMatchObject({ linkedWhatsAppBusinessAccountId: WABA_ID, phoneNumber: { displayPhoneNumberName: 'Kapittx' } })
+    const got = await h.client.send(new GetLinkedWhatsAppBusinessAccountPhoneNumberCommand({ id: PHONE_ID })); expect(got).toMatchObject({ linkedWhatsAppBusinessAccountId: WABA_ID, phoneNumber: { displayPhoneNumberName: 'Example Sender' } })
     const updated = await h.client.send(new UpdateLinkedWhatsAppBusinessAccountPhoneNumberCommand({ id: PHONE_ID, callSettings: { callEnabled: true } })); expect(updated.phoneNumberId).toBe(PHONE_ID)
     expect((await h.client.send(new GetLinkedWhatsAppBusinessAccountPhoneNumberCommand({ id: PHONE_ID }))).callSettings).toEqual({ callEnabled: true })
   })

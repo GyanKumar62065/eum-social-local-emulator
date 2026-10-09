@@ -1,4 +1,4 @@
-# eum-local configuration. Copy to eum-local.yaml (or point EUM_CONFIG at it).
+# EUM Social Local Emulator configuration. Copy to eum-social-local-emulator.yaml (or set EUM_CONFIG).
 region: ap-south-1
 accountId: "000000000000"
 
@@ -8,13 +8,13 @@ aws:
   endpoint: http://localhost:4566
 
 wabas:
-  - name: Kapittx Dev
+  - name: Example Business
     metaWabaId: "100000000000001"
     eventDestinations:
       - arn:aws:sns:ap-south-1:000000000000:eum-whatsapp-events
     phoneNumbers:
       - phoneNumber: "+919800000001"
-        displayName: Kapittx
+        displayName: Example Sender
         metaPhoneNumberId: "200000000000001"
     templates:
       - name: invoice_reminder

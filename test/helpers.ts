@@ -8,7 +8,7 @@ import { buildApp, type App } from '../src/server.ts'
 import { FakeClock } from '../src/sim/clock.ts'
 
 export const TEST_TOPIC = 'arn:aws:sns:ap-south-1:000000000000:eum-events'
-export const TEST_SEED: WabaSeed = { name: 'Kapittx Test', metaWabaId: '100000000000001', eventDestinations: [TEST_TOPIC], phoneNumbers: [{ phoneNumber: '+919800000001', displayName: 'Kapittx', metaPhoneNumberId: '200000000000001' }], templates: [{ name: 'invoice_reminder', language: 'en', category: 'UTILITY', components: [{ type: 'BODY', text: 'Hi {{1}}, invoice {{2}} of {{3}} is due on {{4}}.' }] }] }
+export const TEST_SEED: WabaSeed = { name: 'Example Business', metaWabaId: '100000000000001', eventDestinations: [TEST_TOPIC], phoneNumbers: [{ phoneNumber: '+919800000001', displayName: 'Example Sender', metaPhoneNumberId: '200000000000001' }], templates: [{ name: 'invoice_reminder', language: 'en', category: 'UTILITY', components: [{ type: 'BODY', text: 'Hi {{1}}, invoice {{2}} of {{3}} is due on {{4}}.' }] }] }
 export const WABA_ID = wabaAwsId('100000000000001')
 export const PHONE_ID = phoneAwsId('200000000000001')
 export interface Harness { app: App; url: string; client: SocialMessagingClient; clock: FakeClock; published: { arn: string; envelope: Envelope }[]; blobs: MemoryBlobStore; close(): Promise<void> }

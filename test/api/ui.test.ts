@@ -9,6 +9,6 @@ describe('UI route', () => {
   it('serves the built inbox, or explains how to build it', async () => {
     const response = await fetch(`${h.url}/_eum/ui/`); const text = await response.text()
     if (existsSync(new URL('../../ui/dist/index.html', import.meta.url))) expect(text).toContain('<div id="app">')
-    else expect(text).toMatch(/npm run ui:build/)
+    else expect(text).toMatch(/bun run ui:build/)
   })
 })
