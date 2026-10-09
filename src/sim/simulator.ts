@@ -99,17 +99,17 @@ export class Simulator {
     if (seconds < 0) return
     this.d.clock.schedule(seconds * 1000, async () => {
       const current = getTemplateById(this.d.db, template.metaTemplateId)
-      if (current?.status === 'PENDING' && current.generation === (template.generation ?? 1)) await this.setTemplateStatus(template.metaTemplateId, 'APPROVED', undefined, template.generation ?? 1)
+      if (current?.status === 'PENDING' && current.generation === (template.generation ?? 1)) await this.setTemplateStatus(template.metaTemplateId, 'APPROVED', undefined, template.generation ?? 1, 'PENDING')
     })
   }
-  async setTemplateStatus(id: string, status: 'APPROVED' | 'REJECTED' | 'PAUSED' | 'DISABLED', reason: string | undefined, expectedGeneration: number): Promise<TemplateRow> {
+  async setTemplateStatus(id: string, status: 'APPROVED' | 'REJECTED' | 'PAUSED' | 'DISABLED', reason: string | undefined, expectedGeneration: number, expectedStatus: string): Promise<TemplateRow> {
     const { db, clock, bus } = this.d
     const template = getTemplateById(db, id)
     const waba = template && getWaba(db, template.wabaId)
     if (!template || !waba) throw new Error(`unknown template ${id}`)
-    if ((template.generation ?? 1) !== expectedGeneration) throw new Error(`template ${id} has changed; refresh before applying a decision`)
+    if ((template.generation ?? 1) !== expectedGeneration || template.status !== expectedStatus) throw new Error(`template ${id} has changed; refresh before applying a decision`)
     const now = clock.now()
-    setTemplateStatus(db, id, status, now, expectedGeneration, reason)
+    setTemplateStatus(db, id, status, now, expectedGeneration, expectedStatus, reason)
     await bus.emit({ kind: 'template_status', waba, now, change: { field: 'message_template_status_update', value: templateStatusValue(template, status, reason) } })
     const updated = getTemplateById(db, id)!
     bus.notify({ type: 'template', template: updated })

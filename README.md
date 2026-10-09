@@ -113,7 +113,7 @@ another file. If no file exists, it starts with defaults and no seeded WABAs.
 | YAML key | Default | Purpose |
 | --- | --- | --- |
 | `port` | `4580` | HTTP port |
-| `host` | `0.0.0.0` | Bind address |
+| `host` | `127.0.0.1` | Bind address; loopback keeps the local admin API off the network by default |
 | `dbPath` | `./data/eum-local.db` | SQLite database path |
 | `region` | `ap-south-1` | Region used in generated ARNs and SDK integration |
 | `accountId` | `000000000000` | Account ID used in generated ARNs |
@@ -123,6 +123,11 @@ another file. If no file exists, it starts with defaults and no seeded WABAs.
 | `templates.autoApproveSeconds` | `0` | `0` approves immediately; `-1` leaves templates for manual review in the inbox |
 | `sim.defaultFlow` | `[sent, delivered, read]` | Default status progression for simulated messages |
 | `sim.stepDelayMs` | `1000` | Delay between status events |
+
+The default bind address is loopback, so the emulator and its administration API are available only
+from the local machine. To connect from another development container, set `EUM_HOST=0.0.0.0` or
+configure `host` explicitly; this exposes the unauthenticated local administration API to that
+network, so use it only on a trusted development network.
 | `sim.rules` | `[]` | Ordered recipient/type/template rules for delivery status flows or immediate modeled request errors (`denied`, `throttled`, `dependency`, `internal`) |
 | `messageIdMode` | `uuid` | `uuid` or WhatsApp-style `wamid` message identifiers |
 
@@ -249,7 +254,8 @@ Native `button` replies preserve `text` and `payload` separately; `list_reply` a
 optional `description`. URL buttons are presented as links and do not create inbound quick replies.
 
 Manual template decisions use `POST /_eum/api/templates/:id/{approve|reject|pause|disable}` with a
-JSON body such as `{"generation": 2, "reason": "INVALID_FORMAT"}`. Event destinations with a
+JSON body such as `{"generation": 2, "expectedStatus": "PENDING", "reason": "INVALID_FORMAT"}`.
+The expected status prevents stale UI actions from overriding a newer decision. Event destinations with a
 failed delivery can be retried using `POST /_eum/api/events/:eventId/replay` and
 `{"destination": "arn:aws:sns:..."}`. Replay resends the stored EUM event; it does not send the
 WhatsApp message again.

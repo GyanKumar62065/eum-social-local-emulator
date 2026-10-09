@@ -52,7 +52,7 @@ export function parseConfig(text: string | undefined, env: Record<string, string
   const port = Number(env.EUM_PORT ?? raw.port ?? 4580)
   if (!Number.isInteger(port) || port < 1 || port > 65535) fail('port must be an integer from 1 to 65535')
   return {
-    port, host: env.EUM_HOST ?? raw.host ?? '0.0.0.0', dbPath: env.EUM_DB ?? raw.dbPath ?? './data/eum-local.db',
+    port, host: env.EUM_HOST ?? raw.host ?? '127.0.0.1', dbPath: env.EUM_DB ?? raw.dbPath ?? './data/eum-local.db',
     region: env.EUM_REGION ?? raw.region ?? 'ap-south-1', accountId: String(raw.accountId ?? '000000000000'),
     aws: awsEndpoint ? { endpoint: awsEndpoint } : undefined, webhookUrl: raw.webhookUrl, wabas,
     templates: { autoApproveSeconds: Number(raw.templates?.autoApproveSeconds ?? 0) },

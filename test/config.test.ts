@@ -4,7 +4,7 @@ import { parseConfig } from '../src/config.ts'
 describe('parseConfig', () => {
   it('applies defaults when there is no file', () => {
     const c = parseConfig(undefined, {})
-    expect(c).toMatchObject({ port: 4580, host: '0.0.0.0', dbPath: './data/eum-local.db', region: 'ap-south-1', accountId: '000000000000', wabas: [], templates: { autoApproveSeconds: 0 }, messageIdMode: 'uuid', sim: { defaultFlow: ['sent', 'delivered', 'read'], stepDelayMs: 1000, rules: [] } })
+    expect(c).toMatchObject({ port: 4580, host: '127.0.0.1', dbPath: './data/eum-local.db', region: 'ap-south-1', accountId: '000000000000', wabas: [], templates: { autoApproveSeconds: 0 }, messageIdMode: 'uuid', sim: { defaultFlow: ['sent', 'delivered', 'read'], stepDelayMs: 1000, rules: [] } })
     expect(c.aws).toBeUndefined()
   })
 

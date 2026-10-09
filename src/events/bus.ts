@@ -17,6 +17,7 @@ export interface BusOptions { db: Db; sinks: Sink[]; accountId: string; webhookU
 export class EventBus {
   private readonly o: BusOptions
   private readonly subscribers = new Set<(event: BusEvent) => void>()
+  private readonly replaysInFlight = new Map<string, Promise<EventRow>>()
   constructor(options: BusOptions) { this.o = options }
   subscribe(fn: (event: BusEvent) => void): () => void { this.subscribers.add(fn); return () => this.subscribers.delete(fn) }
   notify(event: BusEvent): void {
@@ -37,6 +38,15 @@ export class EventBus {
     return row
   }
   async replay(eventId: string, destination: string, now: number): Promise<EventRow> {
+    const key = `${eventId}\0${destination}`
+    const active = this.replaysInFlight.get(key)
+    if (active) return active
+    const replay = this.replayOnce(eventId, destination, now)
+    this.replaysInFlight.set(key, replay)
+    try { return await replay }
+    finally { if (this.replaysInFlight.get(key) === replay) this.replaysInFlight.delete(key) }
+  }
+  private async replayOnce(eventId: string, destination: string, now: number): Promise<EventRow> {
     const event = getEvent(this.o.db, eventId)
     if (!event) throw new Error(`event ${eventId} not found`)
     const delivery = event.deliveries.find((item) => item.destination === destination)

@@ -31,5 +31,28 @@ describe('EventBus', () => {
     const row = await bus.emit({ kind: 'status', waba, now: 0, change: { field: 'messages', value: {} } })
     expect(row.deliveries[0]).toEqual({ destination: 'arn:aws:sns:ap-south-1:000000000000:t', ok: false, detail: 'connect ECONNREFUSED 127.0.0.1:4566' })
   })
+  it('coalesces concurrent replays of the same failed destination', async () => {
+    let calls = 0
+    let finishReplay!: () => void
+    const blocked = new Promise<void>((resolve) => { finishReplay = resolve })
+    const sink: Sink = { name: 'sometimes-down', accepts: () => true, publish: async () => {
+      calls++
+      if (calls === 1) throw new Error('offline')
+      await blocked
+      return 'replayed'
+    } }
+    const destination = 'arn:aws:sns:ap-south-1:000000000000:t'
+    const { db, bus, waba } = setup([sink], [destination])
+    const original = await bus.emit({ kind: 'status', waba, now: 1, change: { field: 'messages', value: {} } })
+    const first = bus.replay(original.id, destination, 2)
+    const second = bus.replay(original.id, destination, 2)
+    await Promise.resolve()
+    expect(calls).toBe(2)
+    finishReplay()
+    const [firstResult, secondResult] = await Promise.all([first, second])
+    expect(firstResult.deliveries[0]).toMatchObject({ ok: true, detail: 'replayed' })
+    expect(secondResult).toEqual(firstResult)
+    expect(listEvents(db, {})[0].deliveryAttempts?.[0].attempts).toHaveLength(2)
+  })
   it('unsubscribes', () => { const { bus } = setup([], []); let count = 0; const off = bus.subscribe(() => count++); bus.notify({ type: 'waba' }); off(); bus.notify({ type: 'waba' }); expect(count).toBe(1) })
 })

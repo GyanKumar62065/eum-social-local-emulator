@@ -8,8 +8,8 @@ export function findTemplate(db: Db, wabaId: string, name: string, language: str
 export function listTemplates(db: Db, wabaId?: string): TemplateRow[] { const rows = wabaId ? db.prepare('SELECT * FROM template WHERE waba_id = ? ORDER BY name, language').all(wabaId) : db.prepare('SELECT * FROM template ORDER BY waba_id, name, language').all(); return (rows as Row[]).map(toTemplate) }
 export function listTemplatesByName(db: Db, wabaId: string, name: string): TemplateRow[] { return (db.prepare('SELECT * FROM template WHERE waba_id = ? AND name = ? ORDER BY language').all(wabaId, name) as Row[]).map(toTemplate) }
 export function updateTemplate(db: Db, t: TemplateRow): void { db.prepare('UPDATE template SET category = ?, status = ?, parameter_format = ?, components = ?, definition_json = ?, generation = ?, rejection_reason = NULL, updated_at = ? WHERE meta_template_id = ?').run(t.category, t.status, t.parameterFormat, JSON.stringify(t.components), JSON.stringify(t.definition ?? {}), t.generation ?? 1, t.updatedAt, t.metaTemplateId) }
-export function setTemplateStatus(db: Db, id: string, status: string, at: number, generation: number, reason?: string): void {
-  const result = db.prepare('UPDATE template SET status = ?, rejection_reason = ?, updated_at = ? WHERE meta_template_id = ? AND generation = ?').run(status, reason ?? null, at, id, generation)
+export function setTemplateStatus(db: Db, id: string, status: string, at: number, generation: number, expectedStatus: string, reason?: string): void {
+  const result = db.prepare('UPDATE template SET status = ?, rejection_reason = ?, updated_at = ? WHERE meta_template_id = ? AND generation = ? AND status = ?').run(status, reason ?? null, at, id, generation, expectedStatus)
   if (Number(result.changes) !== 1) throw new Error(`template ${id} has changed; refresh before applying a decision`)
 }
 export function deleteTemplate(db: Db, id: string): void { db.prepare('DELETE FROM template WHERE meta_template_id = ?').run(id) }

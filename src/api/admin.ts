@@ -64,12 +64,14 @@ export function registerAdminApi(app: FastifyInstance, ctx: Ctx, handlers: Handl
   for (const [action, status] of [['approve', 'APPROVED'], ['reject', 'REJECTED'], ['pause', 'PAUSED'], ['disable', 'DISABLED']] as const) {
     app.post(`${prefix}/templates/:id/${action}`, async (request, reply) => {
       const { id } = request.params as { id: string }
-      const body = (request.body ?? {}) as { reason?: string; generation?: number }
+      const body = (request.body ?? {}) as { reason?: string; generation?: number; expectedStatus?: string }
       if (body.generation !== undefined && (typeof body.generation !== 'number' || !Number.isSafeInteger(body.generation) || body.generation < 1)) return fail(reply, 400, 'generation must be a positive safe integer')
-      const currentGeneration = getTemplateById(db, id)?.generation
-      const generation = body.generation ?? currentGeneration
+      const current = getTemplateById(db, id)
+      if (!current) return fail(reply, 404, `template ${id} not found`)
+      const generation = body.generation ?? current.generation
       if (generation === undefined) return fail(reply, 404, `template ${id} not found`)
-      try { return { template: await sim.setTemplateStatus(id, status, body.reason, generation) } }
+      if (typeof body.expectedStatus !== 'string' || !body.expectedStatus) return fail(reply, 400, 'expectedStatus is required')
+      try { return { template: await sim.setTemplateStatus(id, status, body.reason, generation, body.expectedStatus) } }
       catch (error) { const message = errorText(error); return fail(reply, message.includes('has changed') ? 409 : 404, message) }
     })
   }
