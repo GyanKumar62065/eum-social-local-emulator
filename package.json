@@ -1,0 +1,37 @@
+{
+  "name": "eum-local",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local emulator for AWS End User Messaging Social (WhatsApp)",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "dev": "node --watch src/main.ts",
+    "test": "vitest run",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "typecheck": "tsc --noEmit",
+    "models:update": "node scripts/update-models.ts",
+    "ui:build": "vite build ui",
+    "ui:dev": "vite ui"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1148.0",
+    "@aws-sdk/client-sns": "^3.1148.0",
+    "@fastify/static": "^10.1.5",
+    "fastify": "^5.12.5",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-socialmessaging": "^3.1148.0",
+    "@aws-sdk/client-sqs": "^3.1148.0",
+    "@preact/preset-vite": "^2.10.6",
+    "@types/node": "^26.6.4",
+    "preact": "^11.0.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.3"
+  }
+}
