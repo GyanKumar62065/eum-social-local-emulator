@@ -25,4 +25,11 @@ describe('AWS API pipeline', () => {
     const response = await signedFetch(`${h.url}/v1/whatsapp/nope`); expect(response.status).toBe(404); expect(response.headers.get('x-amzn-requestid')).toMatch(/^[0-9a-f-]{36}$/)
   })
   it('serves health', async () => { expect(await (await fetch(`${h.url}/_eum/health`)).json()).toEqual({ status: 'ok' }) })
+  it('simulates exactly the 22 v1 operations', async () => {
+    const { coverage } = await import('../../src/api/aws.ts')
+    const result = coverage(h.app.model, h.app.handlers)
+    expect(result.simulated).toHaveLength(22)
+    expect(result.notSimulated).toHaveLength(16)
+    expect(result.notSimulated.every((name) => /Flow|Call|Dataset|ConversionEvent|BusinessPublicKey/.test(name))).toBe(true)
+  })
 })
