@@ -21,6 +21,12 @@ describe('parseConfig', () => {
     expect(c.wabas[0].phoneNumbers![0].metaPhoneNumberId).toBe('200000000000001')
   })
 
+  it('keeps numeric simulation error codes as numbers', () => {
+    const c = parseConfig('sim:\n  rules:\n    - match: { to: "*0000" }\n      outcome: { status: failed, code: 131026 }\n', {})
+    expect(c.sim.rules[0].outcome.code).toBe(131026)
+    expect(typeof c.sim.rules[0].outcome.code).toBe('number')
+  })
+
   it('rejects bad config with the source and reason', () => {
     expect(() => parseConfig('wabas:\n  - name: A\n', {}, 'x.yaml')).toThrow(/x\.yaml: wabas\[0\]\.metaWabaId/)
     expect(() => parseConfig('sim:\n  defaultFlow: [sent, bogus]\n', {})).toThrow(/sim\.defaultFlow/)

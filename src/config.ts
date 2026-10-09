@@ -25,7 +25,9 @@ export function parseConfig(text: string | undefined, env: Record<string, string
     if (!rule?.match || !rule?.outcome) fail(`sim.rules[${i}] needs match and outcome`)
     if (rule.outcome.flow) flow(rule.outcome.flow, `sim.rules[${i}].outcome.flow`)
     if (rule.outcome.status !== undefined && rule.outcome.status !== 'failed') fail(`sim.rules[${i}].outcome.status can only be failed`)
-    return rule as SimRule
+    const code = rule.outcome.code === undefined ? undefined : Number(rule.outcome.code)
+    if (code !== undefined && !Number.isSafeInteger(code)) fail(`sim.rules[${i}].outcome.code must be a safe integer`)
+    return { ...rule, outcome: { ...rule.outcome, code } } as SimRule
   })
   const wabas: WabaSeed[] = (raw.wabas ?? []).map((waba: any, i: number) => {
     if (!waba?.name) fail(`wabas[${i}].name is required`)
