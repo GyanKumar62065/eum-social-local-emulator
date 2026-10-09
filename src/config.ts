@@ -1,12 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { parse } from 'yaml'
 
-export const STATUS_NAMES = ['sent', 'delivered', 'read', 'failed'] as const
+export const STATUS_NAMES = ['accepted', 'sent', 'delivered', 'read', 'failed', 'deleted', 'warning'] as const
 export type StatusName = (typeof STATUS_NAMES)[number]
 export interface PhoneSeed { phoneNumber: string; displayName: string; metaPhoneNumberId?: string; qualityRating?: string; dataLocalizationRegion?: string }
 export interface TemplateSeed { name: string; language: string; category: string; status?: string; parameterFormat?: string; components: Record<string, unknown>[] }
 export interface WabaSeed { name: string; metaWabaId?: string; eventDestinations?: string[]; phoneNumbers?: PhoneSeed[]; templates?: TemplateSeed[] }
-export interface SimRule { match: { to?: string; type?: string; template?: string }; outcome: { status?: 'failed'; code?: number; title?: string; flow?: StatusName[] } }
+export type RequestErrorMode = 'denied' | 'throttled' | 'dependency' | 'internal'
+export interface SimRule { match: { to?: string; type?: string; template?: string }; outcome: { status?: 'failed'; code?: number; title?: string; flow?: StatusName[]; requestError?: RequestErrorMode } }
 export interface Config {
   port: number; host: string; dbPath: string; region: string; accountId: string; aws?: { endpoint: string }; webhookUrl?: string
   wabas: WabaSeed[]; templates: { autoApproveSeconds: number }; sim: { defaultFlow: StatusName[]; stepDelayMs: number; rules: SimRule[] }; messageIdMode: 'uuid' | 'wamid'
@@ -25,6 +26,7 @@ export function parseConfig(text: string | undefined, env: Record<string, string
     if (!rule?.match || !rule?.outcome) fail(`sim.rules[${i}] needs match and outcome`)
     if (rule.outcome.flow) flow(rule.outcome.flow, `sim.rules[${i}].outcome.flow`)
     if (rule.outcome.status !== undefined && rule.outcome.status !== 'failed') fail(`sim.rules[${i}].outcome.status can only be failed`)
+    if (rule.outcome.requestError !== undefined && !['denied', 'throttled', 'dependency', 'internal'].includes(rule.outcome.requestError)) fail(`sim.rules[${i}].outcome.requestError must be denied, throttled, dependency or internal`)
     const code = rule.outcome.code === undefined ? undefined : Number(rule.outcome.code)
     if (code !== undefined && !Number.isSafeInteger(code)) fail(`sim.rules[${i}].outcome.code must be a safe integer`)
     return { ...rule, outcome: { ...rule.outcome, code } } as SimRule

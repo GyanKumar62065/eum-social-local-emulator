@@ -123,7 +123,7 @@ another file. If no file exists, it starts with defaults and no seeded WABAs.
 | `templates.autoApproveSeconds` | `0` | `0` approves immediately; `-1` leaves templates for manual review in the inbox |
 | `sim.defaultFlow` | `[sent, delivered, read]` | Default status progression for simulated messages |
 | `sim.stepDelayMs` | `1000` | Delay between status events |
-| `sim.rules` | `[]` | Ordered recipient/type/template match rules for simulated failure or custom status flow |
+| `sim.rules` | `[]` | Ordered recipient/type/template rules for delivery status flows or immediate modeled request errors (`denied`, `throttled`, `dependency`, `internal`) |
 | `messageIdMode` | `uuid` | `uuid` or WhatsApp-style `wamid` message identifiers |
 
 Environment variables override corresponding YAML settings:
@@ -140,6 +140,119 @@ Environment variables override corresponding YAML settings:
 The `metaWabaId` and `metaPhoneNumberId` values in seeds must be numeric strings. Seed phone
 numbers use E.164 format. See [`eum-social-local-emulator.example.yaml`](eum-social-local-emulator.example.yaml) for a complete
 configuration example and inline rule examples.
+
+## Supported AWS operations
+
+The current implementation simulates these AWS End User Messaging Social operations:
+
+- `ListLinkedWhatsAppBusinessAccounts`
+- `GetLinkedWhatsAppBusinessAccount`
+- `GetLinkedWhatsAppBusinessAccountPhoneNumber`
+- `PutWhatsAppBusinessAccountEventDestinations`
+- `CreateWhatsAppMessageTemplate`
+- `UpdateWhatsAppMessageTemplate`
+- `GetWhatsAppMessageTemplate`
+- `ListWhatsAppMessageTemplates`
+- `SendWhatsAppMessage`
+
+Other operations present in the vendored service model return a modeled `501` response. The
+emulator does not claim complete AWS service coverage. Synchronous invalid requests return modeled
+errors; simulation rules can also return immediate denied/throttled/dependency/internal failures.
+An unknown or inactive template is rejected synchronously. A structurally valid send whose Meta
+template parameter count is wrong can still be accepted by the AWS API simulation and then produce
+a Meta-style failed status event, preserving the distinction between API rejection and later
+provider delivery failure.
+
+## Generic SDK walkthrough
+
+This example discovers the WABA through the SDK, creates a template, approves that template using
+the local admin API, sends with the AWS SDK, then inspects the event log. Replace the phone number
+ID with a seeded ID printed at startup. The `biz_opaque_callback_data` value is copied into the
+corresponding status event. Set `templates.autoApproveSeconds: -1` in the config if you want to
+review the template manually; the default configuration approves it automatically.
+
+```ts
+import {
+  CreateWhatsAppMessageTemplateCommand,
+  ListLinkedWhatsAppBusinessAccountsCommand,
+  SendWhatsAppMessageCommand,
+  SocialMessagingClient,
+} from '@aws-sdk/client-socialmessaging'
+
+const endpoint = process.env.EUM_ENDPOINT ?? 'http://localhost:4580'
+const client = new SocialMessagingClient({
+  region: 'ap-south-1', endpoint,
+  credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+})
+
+const { linkedAccounts = [] } = await client.send(new ListLinkedWhatsAppBusinessAccountsCommand({}))
+const waba = linkedAccounts[0]
+if (!waba) throw new Error('No WABA is seeded; add one in the emulator configuration.')
+
+const definition = new TextEncoder().encode(JSON.stringify({
+  name: 'local_order_update', language: 'en_US', category: 'UTILITY',
+  parameter_format: 'POSITIONAL',
+  components: [{ type: 'BODY', text: 'Order {{1}} is ready.' }],
+}))
+const created = await client.send(new CreateWhatsAppMessageTemplateCommand({ id: waba.id, templateDefinition: definition }))
+const approval = await fetch(`${endpoint}/_eum/api/templates/${created.metaTemplateId}/approve`, {
+  method: 'POST', headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ generation: 1 }),
+})
+if (!approval.ok) throw new Error(await approval.text())
+
+const sent = await client.send(new SendWhatsAppMessageCommand({
+  originationPhoneNumberId: process.env.EUM_PHONE_NUMBER_ID!, metaApiVersion: 'v20.0',
+  message: new TextEncoder().encode(JSON.stringify({
+    messaging_product: 'whatsapp', to: '+15550000001', type: 'template',
+    biz_opaque_callback_data: 'order-123',
+    template: { name: 'local_order_update', language: { code: 'en_US' }, components: [
+      { type: 'body', parameters: [{ type: 'text', text: 'ORDER-123' }] },
+    ] },
+  })),
+}))
+console.log('AWS message ID:', sent.messageId)
+const { messages } = await (await fetch(`${endpoint}/_eum/api/messages`)).json()
+const outbound = messages.find((message: { awsMessageId?: string }) => message.awsMessageId === sent.messageId)
+if (!outbound) throw new Error('The sent message was not found in the local inbox.')
+await new Promise((resolve) => setTimeout(resolve, 3500)) // default flow emits sent, delivered, read over 3 seconds
+const detail = await (await fetch(`${endpoint}/_eum/api/messages/${encodeURIComponent(outbound.wamid)}`)).json()
+console.log('Meta WAMID and status events:', outbound.wamid, detail.history, detail.events)
+const reply = await fetch(`${endpoint}/_eum/api/inbound`, {
+  method: 'POST', headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({
+    phoneNumberId: process.env.EUM_PHONE_NUMBER_ID, from: '+15550000001', type: 'interactive',
+    interactiveType: 'button_reply', id: 'confirm', title: 'Confirm', contextMessageId: outbound.wamid,
+  }),
+})
+if (!reply.ok) throw new Error(await reply.text())
+```
+
+For a correlated customer reply, use the inbox composer after selecting an outbound message and
+enable **Quote selected**. The generic admin equivalent is:
+
+```json
+{
+  "phoneNumberId": "PHONE_NUMBER_ID",
+  "from": "+15550000001",
+  "type": "interactive",
+  "interactiveType": "button_reply",
+  "id": "confirm",
+  "title": "Confirm",
+  "contextMessageId": "wamid.ORIGINAL_OUTBOUND_ID"
+}
+```
+
+The inbound webhook contains its own message ID and `context.id` equal to the supplied Meta WAMID.
+The emulator checks that the referenced outbound message belongs to the same phone and customer.
+Native `button` replies preserve `text` and `payload` separately; `list_reply` also supports an
+optional `description`. URL buttons are presented as links and do not create inbound quick replies.
+
+Manual template decisions use `POST /_eum/api/templates/:id/{approve|reject|pause|disable}` with a
+JSON body such as `{"generation": 2, "reason": "INVALID_FORMAT"}`. Event destinations with a
+failed delivery can be retried using `POST /_eum/api/events/:eventId/replay` and
+`{"destination": "arn:aws:sns:..."}`. Replay resends the stored EUM event; it does not send the
+WhatsApp message again.
 
 ## HTTP endpoints
 
@@ -218,8 +331,12 @@ the source repository is currently public as well.
 
 ## Design
 
-The design and API behavior are documented in the
-[design specification](https://github.com/GyanKumar62065/eum-social-local-emulator/blob/main/docs/specs/2026-10-07-eum-social-local-emulator-design.md).
+The original architecture is described in the
+[initial design](https://github.com/GyanKumar62065/eum-social-local-emulator/blob/main/docs/specs/2026-10-07-eum-social-local-emulator-design.md). The current generic
+compatibility and lifecycle scope is in the
+[completeness specification](https://github.com/GyanKumar62065/eum-social-local-emulator/blob/main/docs/specs/2026-10-09-generic-emulator-completeness-design.md), with
+its implementation breakdown in the
+[implementation plan](https://github.com/GyanKumar62065/eum-social-local-emulator/blob/main/docs/superpowers/plans/2026-10-09-generic-emulator-completeness.md).
 
 ## License
 

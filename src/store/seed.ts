@@ -28,7 +28,8 @@ export function createWaba(db: Db, cfg: { region: string; accountId: string }, s
       metaTemplateId: metaNumericId(), wabaId: id, name: template.name, language: template.language,
       category: template.category.toUpperCase(), status: template.status ?? 'APPROVED',
       parameterFormat: (template.parameterFormat ?? 'POSITIONAL').toUpperCase(), components: template.components as TemplateRow['components'],
-      createdAt: now, updatedAt: now,
+      definition: { name: template.name, language: template.language, category: template.category, components: template.components, parameter_format: template.parameterFormat ?? 'POSITIONAL' },
+      generation: 1, createdAt: now, updatedAt: now,
     })
   }
   return waba
