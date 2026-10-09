@@ -2,7 +2,7 @@
   "name": "@gyankumar62065/eum-social-local-emulator",
   "version": "0.1.0",
   "publishConfig": {
-    "access": "restricted"
+    "access": "public"
   },
   "packageManager": "bun@1.3.12",
   "description": "Local development emulator for AWS End User Messaging Social",

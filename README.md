@@ -46,12 +46,11 @@ The database defaults to `./data/eum-local.db` and is created automatically. The
 contains a WABA, phone number, and approved template. Copy it to `eum-social-local-emulator.yaml` before editing;
 that local file is intentionally not part of the published package.
 
-## Install the private package
+## Install the public package
 
-The package is prepared as a **restricted scoped npm package**. Replace `gyankumar62065` below
-with the npm username that owns the package scope. Your npm account must have access to the private
-package. npm requires a paid user or organization account to publish private packages. Bun is used
-for installation and scripts in this project; it can install scoped packages from the npm registry.
+The package is configured for public npm publication under the `@gyankumar62065` scope. Once
+published, anyone can install it from the registry; a paid npm account is not required for public
+packages. This project uses Bun for installation and development scripts.
 
 ```sh
 bun add @gyankumar62065/eum-social-local-emulator
@@ -66,10 +65,8 @@ cp node_modules/@gyankumar62065/eum-social-local-emulator/eum-social-local-emula
 EUM_CONFIG=./eum-social-local-emulator.yaml bunx eum-social-local-emulator
 ```
 
-The package can also be installed as a project dependency with `bun add` and its command run via
-`bunx`. The server reads configuration from the current working directory by default, so set
-`EUM_CONFIG` when the config is elsewhere. Keep the package access token in your normal registry
-configuration; never put it in source control.
+The server reads configuration from the current working directory by default, so set `EUM_CONFIG`
+when the config is elsewhere.
 
 ## Connect an application
 
@@ -97,7 +94,8 @@ before depending on a particular operation.
 
 ### Java (AWS SDK v2)
 
-A small Java smoke-test project is included in the source repository under `test/java`:
+A small [Java smoke-test project](https://github.com/GyanKumar62065/eum-social-local-emulator/tree/main/test/java)
+is included in the source repository under `test/java`:
 
 ```sh
 cd test/java
@@ -159,8 +157,9 @@ AWS API failure.
 
 ## LocalStack event integration
 
-The example Compose file starts LocalStack and the emulator, then provisions an SNS topic and SQS
-subscription for inspecting events:
+The [example Compose file](https://github.com/GyanKumar62065/eum-social-local-emulator/blob/main/docker-compose.example.yml)
+starts LocalStack and the emulator, then provisions an SNS topic and SQS subscription for inspecting
+events. This file is in the source repository and is not included in the npm package.
 
 ```sh
 docker compose -f docker-compose.example.yml up --build
@@ -177,6 +176,9 @@ Set `EUM_E2E_LOCALSTACK` to use a different LocalStack endpoint. This check is i
 source repository and is not included in the published runtime package.
 
 ## Development commands
+
+These commands are for a clone of the [source repository](https://github.com/GyanKumar62065/eum-social-local-emulator),
+not an installed npm package.
 
 ```sh
 bun install --frozen-lockfile
@@ -198,27 +200,26 @@ Review the model source, generated operation behavior, and this README's support
 releasing an updated emulator. The model update script requires network access to the upstream AWS
 model source.
 
-## Package maintenance and private publishing
+## Package maintenance and public publishing
 
-The package is scoped as `@gyankumar62065/eum-social-local-emulator` and configured for restricted
-registry access. Ensure the npm account has permission to publish restricted packages. Authenticate
-with the npm registry, then from the repository root:
+The package is scoped as `@gyankumar62065/eum-social-local-emulator` and configured for public
+registry access. Authenticate to npm as the owner of the scope, then from the repository root:
 
 ```sh
 bun install --frozen-lockfile
-bun publish --access restricted
+bun publish --access public
 ```
 
 The package's `prepack` script builds the inbox UI; the allowlist in `package.json` includes the
 command, runtime source, service model, built UI, example configuration, and README. It excludes
 local configuration, databases, tests, and development-only files. Review the package contents and
-version before each publish. Publishing is a separate release action and is not performed by this
-project setup.
+version before each publish. The npm package is independent of the GitHub repository's visibility;
+the source repository is currently public as well.
 
 ## Design
 
-The design and API behavior are documented in
-[`docs/specs/2026-10-07-eum-social-local-emulator-design.md`](docs/specs/2026-10-07-eum-social-local-emulator-design.md).
+The design and API behavior are documented in the
+[design specification](https://github.com/GyanKumar62065/eum-social-local-emulator/blob/main/docs/specs/2026-10-07-eum-social-local-emulator-design.md).
 
 ## License
 
