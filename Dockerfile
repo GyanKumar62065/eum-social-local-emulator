@@ -1,4 +1,6 @@
 FROM oven/bun:1.3.12-alpine AS production-deps
+# The versioned Bun base image can lag Alpine security updates.
+RUN apk upgrade --no-cache
 WORKDIR /app
 COPY package.json bun.lock ./
 RUN bun install --production --frozen-lockfile
@@ -10,6 +12,8 @@ COPY tsconfig.json ./
 RUN bun run ui:build
 
 FROM node:24-alpine
+# Apply Alpine security updates to the shipped runtime image as well.
+RUN apk upgrade --no-cache
 WORKDIR /app
 ENV NODE_ENV=production EUM_DB=/data/eum-local.db EUM_CONFIG=/etc/eum-social-local-emulator/eum-social-local-emulator.yaml
 COPY package.json ./
