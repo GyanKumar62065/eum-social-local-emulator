@@ -15,14 +15,19 @@ import type { Clock } from './clock.ts'
 import { decideOutcome, type Outcome } from './rules.ts'
 import { windowOpen } from './window.ts'
 
-export interface InboundInput { phoneNumberId: string; from: string; name?: string; type: 'text' | 'button' | 'image'; text?: string; mediaBase64?: string; mimeType?: string }
+export interface InboundInput {
+  phoneNumberId: string; from: string; name?: string
+  type: 'text' | 'button' | 'image' | 'interactive'
+  text?: string; payload?: string; mediaBase64?: string; mimeType?: string
+  interactiveType?: 'button_reply' | 'list_reply'; id?: string; title?: string; description?: string
+  contextMessageId?: string
+}
 interface SimDeps { db: Db; clock: Clock; bus: EventBus; config: Config }
 
 export class Simulator {
   private readonly d: SimDeps
   constructor(deps: SimDeps) { this.d = deps }
-  onSend(msg: MessageRow, template: TemplateRow | undefined): void {
-    const outcome = this.decide(msg, template)
+  onSend(msg: MessageRow, template: TemplateRow | undefined, outcome = this.decide(msg, template)): void {
     outcome.flow.forEach((status, index) => {
       this.d.clock.schedule((index + 1) * this.d.config.sim.stepDelayMs, async () => { await this.applyStatus(msg.wamid, status, status === 'failed' ? outcome.failure : undefined) })
     })
@@ -54,6 +59,12 @@ export class Simulator {
     if (!phone || !waba) throw new Error(`unknown phone number ${input.phoneNumberId}`)
     const peer = msisdn(input.from)
     if (!peer) throw new Error(`invalid customer number ${input.from}`)
+    if (input.contextMessageId) {
+      const quoted = getMessage(db, input.contextMessageId)
+      if (!quoted || quoted.direction !== 'out' || quoted.phoneNumberId !== phone.id || quoted.peer !== peer) {
+        throw new Error('context message must belong to the same phone number and customer')
+      }
+    }
     const now = clock.now()
     const wamid = newWamid()
     let payload: Record<string, unknown>
@@ -66,11 +77,20 @@ export class Simulator {
       insertMedia(db, { mediaId, ownerId: phone.id, mimeType, sha256, bytes, createdAt: now })
       payload = { image: { mime_type: mimeType, sha256, id: mediaId, ...(input.text ? { caption: input.text } : {}) } }
       renderedText = `[image] ${input.text ?? ''}`.trim()
-    } else if (input.type === 'button') payload = { button: { text: input.text ?? '', payload: input.text ?? '' } }
-    else payload = { text: { body: input.text ?? '' } }
+    } else if (input.type === 'button') {
+      if (!input.text || input.payload === undefined) throw new Error('button messages require separate text and payload values')
+      payload = { button: { text: input.text, payload: input.payload } }
+    }
+    else if (input.type === 'interactive') {
+      if (input.interactiveType === 'button_reply' && input.id && input.title) payload = { interactive: { type: 'button_reply', button_reply: { id: input.id, title: input.title } } }
+      else if (input.interactiveType === 'list_reply' && input.id && input.title) payload = { interactive: { type: 'list_reply', list_reply: { id: input.id, title: input.title, ...(input.description !== undefined ? { description: input.description } : {}) } } }
+      else throw new Error('interactiveType must be button_reply or list_reply')
+      renderedText = input.title ?? ''
+    } else payload = { text: { body: input.text ?? '' } }
+    if (input.contextMessageId) payload.context = { id: input.contextMessageId }
     const message: MessageRow = { wamid, phoneNumberId: phone.id, direction: 'in', peer, type: input.type, body: payload, renderedText, status: 'received', createdAt: now }
     insertMessage(db, message)
-    await bus.emit({ kind: 'inbound', waba, phone, wamid, now, change: { field: 'messages', value: inboundValue(phone, { wamid, from: peer, name: input.name ?? 'Test Customer', type: input.type, payload, at: now }) } })
+    await bus.emit({ kind: 'inbound', waba, phone, wamid, now, change: { field: 'messages', value: inboundValue(phone, { wamid, from: peer, name: input.name ?? 'Customer', type: input.type, payload, at: now, contextMessageId: input.contextMessageId }) } })
     bus.notify({ type: 'message', message })
     return message
   }
@@ -79,16 +99,17 @@ export class Simulator {
     if (seconds < 0) return
     this.d.clock.schedule(seconds * 1000, async () => {
       const current = getTemplateById(this.d.db, template.metaTemplateId)
-      if (current?.status === 'PENDING' && current.updatedAt === template.updatedAt) await this.setTemplateStatus(template.metaTemplateId, 'APPROVED')
+      if (current?.status === 'PENDING' && current.generation === (template.generation ?? 1)) await this.setTemplateStatus(template.metaTemplateId, 'APPROVED', undefined, template.generation ?? 1, 'PENDING')
     })
   }
-  async setTemplateStatus(id: string, status: 'APPROVED' | 'REJECTED', reason?: string): Promise<TemplateRow> {
+  async setTemplateStatus(id: string, status: 'APPROVED' | 'REJECTED' | 'PAUSED' | 'DISABLED', reason: string | undefined, expectedGeneration: number, expectedStatus: string): Promise<TemplateRow> {
     const { db, clock, bus } = this.d
     const template = getTemplateById(db, id)
     const waba = template && getWaba(db, template.wabaId)
     if (!template || !waba) throw new Error(`unknown template ${id}`)
+    if ((template.generation ?? 1) !== expectedGeneration || template.status !== expectedStatus) throw new Error(`template ${id} has changed; refresh before applying a decision`)
     const now = clock.now()
-    setTemplateStatus(db, id, status, now)
+    setTemplateStatus(db, id, status, now, expectedGeneration, expectedStatus, reason)
     await bus.emit({ kind: 'template_status', waba, now, change: { field: 'message_template_status_update', value: templateStatusValue(template, status, reason) } })
     const updated = getTemplateById(db, id)!
     bus.notify({ type: 'template', template: updated })

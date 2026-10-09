@@ -40,7 +40,7 @@ export function registerAwsApi(app: FastifyInstance, model: SmithyModel, handler
           const output = await handler(input, ctx)
           return reply.code(200).type('application/json').send(JSON.stringify(toJson(model, operation.output, output) ?? {}))
         } catch (error) {
-          if (error instanceof AwsError && operation.errors.includes(error.type)) return sendError(reply, error.status ?? model.errorStatus(error.type), error.type, error.message)
+          if (error instanceof AwsError && (operation.errors.includes(error.type) || error.type === 'AccessDeniedException')) return sendError(reply, error.status ?? model.errorStatus(error.type), error.type, error.message)
           request.log.error({ err: error, operation: operation.name }, 'eum-social-local-emulator: handler failed')
           const message = error instanceof AwsError ? `eum-social-local-emulator bug: ${operation.name} raised undeclared ${error.type}: ${error.message}` : 'eum-social-local-emulator internal error; see the server log'
           return sendError(reply, 500, 'InternalServiceException', message)

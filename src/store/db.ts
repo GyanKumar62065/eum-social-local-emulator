@@ -7,7 +7,7 @@ export type Db = DatabaseSync
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS waba (id TEXT PRIMARY KEY, arn TEXT NOT NULL UNIQUE, meta_waba_id TEXT NOT NULL UNIQUE, name TEXT NOT NULL, registration_status TEXT NOT NULL, link_date INTEGER NOT NULL, event_destinations TEXT NOT NULL DEFAULT '[]', associate_token TEXT);
 CREATE TABLE IF NOT EXISTS phone_number (id TEXT PRIMARY KEY, arn TEXT NOT NULL UNIQUE, waba_id TEXT NOT NULL REFERENCES waba(id) ON DELETE CASCADE, meta_phone_number_id TEXT NOT NULL UNIQUE, phone_number TEXT NOT NULL, display_phone_number TEXT NOT NULL, display_name TEXT NOT NULL, quality_rating TEXT NOT NULL DEFAULT 'GREEN', data_localization_region TEXT, call_settings TEXT);
-CREATE TABLE IF NOT EXISTS template (meta_template_id TEXT PRIMARY KEY, waba_id TEXT NOT NULL REFERENCES waba(id) ON DELETE CASCADE, name TEXT NOT NULL, language TEXT NOT NULL, category TEXT NOT NULL, status TEXT NOT NULL, parameter_format TEXT NOT NULL DEFAULT 'POSITIONAL', components TEXT NOT NULL DEFAULT '[]', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, UNIQUE (waba_id, name, language));
+CREATE TABLE IF NOT EXISTS template (meta_template_id TEXT PRIMARY KEY, waba_id TEXT NOT NULL REFERENCES waba(id) ON DELETE CASCADE, name TEXT NOT NULL, language TEXT NOT NULL, category TEXT NOT NULL, status TEXT NOT NULL, parameter_format TEXT NOT NULL DEFAULT 'POSITIONAL', components TEXT NOT NULL DEFAULT '[]', definition_json TEXT NOT NULL DEFAULT '{}', generation INTEGER NOT NULL DEFAULT 1, rejection_reason TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, UNIQUE (waba_id, name, language));
 CREATE TABLE IF NOT EXISTS message (wamid TEXT PRIMARY KEY, aws_message_id TEXT UNIQUE, phone_number_id TEXT NOT NULL REFERENCES phone_number(id) ON DELETE CASCADE, direction TEXT NOT NULL CHECK (direction IN ('out', 'in')), peer TEXT NOT NULL, type TEXT NOT NULL, body TEXT NOT NULL, rendered_text TEXT, category TEXT, status TEXT NOT NULL, error_code INTEGER, error_title TEXT, created_at INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS message_thread ON message (phone_number_id, peer, created_at);
 CREATE TABLE IF NOT EXISTS message_status (id INTEGER PRIMARY KEY AUTOINCREMENT, wamid TEXT NOT NULL REFERENCES message(wamid) ON DELETE CASCADE, status TEXT NOT NULL, error_code INTEGER, at INTEGER NOT NULL);
@@ -22,6 +22,11 @@ export function openDb(path: string): Db {
   db.exec('PRAGMA foreign_keys = ON')
   if (path !== ':memory:') db.exec('PRAGMA journal_mode = WAL')
   db.exec(SCHEMA)
+  const columns = (table: string) => new Set((db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((column) => column.name))
+  const templateColumns = columns('template')
+  if (!templateColumns.has('definition_json')) db.exec("ALTER TABLE template ADD COLUMN definition_json TEXT NOT NULL DEFAULT '{}'")
+  if (!templateColumns.has('generation')) db.exec('ALTER TABLE template ADD COLUMN generation INTEGER NOT NULL DEFAULT 1')
+  if (!templateColumns.has('rejection_reason')) db.exec('ALTER TABLE template ADD COLUMN rejection_reason TEXT')
   return db
 }
 

@@ -26,7 +26,15 @@ describe('admin API', () => {
     expect((await api('POST', '/inbound', { phoneNumberId: 'phone-number-id-x', from: '+1', type: 'text', text: 'x' })).status).toBe(404); expect((await api('POST', '/inbound', { phoneNumberId: PHONE_ID, from: '+1', type: 'video' })).status).toBe(400)
   })
   it('approves and rejects templates by hand', async () => {
-    const [template] = (await api('GET', '/templates')).json.templates; const result = await api('POST', `/templates/${template.metaTemplateId}/reject`, { reason: 'INVALID_FORMAT' }); expect(result.json.template.status).toBe('REJECTED'); expect(entry(h.published.at(-1)!.envelope).changes[0].value).toMatchObject({ event: 'REJECTED', reason: 'INVALID_FORMAT' }); expect((await api('POST', '/templates/999/approve', {})).status).toBe(404)
+    const [template] = (await api('GET', '/templates')).json.templates; const result = await api('POST', `/templates/${template.metaTemplateId}/reject`, { reason: 'INVALID_FORMAT', generation: template.generation, expectedStatus: template.status }); expect(result.json.template.status).toBe('REJECTED'); expect(entry(h.published.at(-1)!.envelope).changes[0].value).toMatchObject({ event: 'REJECTED', reason: 'INVALID_FORMAT' }); expect((await api('POST', '/templates/999/approve', {})).status).toBe(404)
+  })
+  it('rejects a template decision made against a stale status', async () => {
+    const [template] = (await api('GET', '/templates')).json.templates
+    const [paused, disabled] = await Promise.all([
+      api('POST', `/templates/${template.metaTemplateId}/pause`, { generation: template.generation, expectedStatus: template.status }),
+      api('POST', `/templates/${template.metaTemplateId}/disable`, { generation: template.generation, expectedStatus: template.status }),
+    ])
+    expect([paused.status, disabled.status].sort()).toEqual([200, 409])
   })
   it('serves stored media bytes', async () => {
     const message = await h.app.ctx.sim.inbound({ phoneNumberId: PHONE_ID, from: '+1555', type: 'image', mediaBase64: Buffer.from('img').toString('base64'), mimeType: 'image/png' }); const response = await fetch(`${h.url}/_eum/api/media/${message.body.image.id}`); expect(response.headers.get('content-type')).toBe('image/png'); expect(Buffer.from(await response.arrayBuffer()).toString()).toBe('img')

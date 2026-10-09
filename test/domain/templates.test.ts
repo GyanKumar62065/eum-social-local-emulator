@@ -11,7 +11,7 @@ describe('templates', () => {
     expect(suppliedParams(undefined)).toEqual({ positional: [], named: {} })
   })
   it('renders positional and named templates', () => {
-    expect(renderTemplate(tpl(), send([{ type: 'text', text: 'Asha' }, { type: 'text', text: 'INV-1' }, { type: 'text', text: 'Friday' }]))).toBe('Hi Asha, invoice INV-1 is due Friday. Thanks Asha')
+    expect(renderTemplate(tpl(), send([{ type: 'text', text: 'Asha' }, { type: 'text', text: 'INV-1' }, { type: 'text', text: 'Friday' }]))).toBe('Reminder\nHi Asha, invoice INV-1 is due Friday. Thanks Asha')
     const named = tpl({ parameterFormat: 'NAMED', components: [{ type: 'BODY', text: 'Hi {{first_name}}' }] })
     expect(renderTemplate(named, send([{ type: 'text', text: 'Asha', parameter_name: 'first_name' }]))).toBe('Hi Asha')
   })

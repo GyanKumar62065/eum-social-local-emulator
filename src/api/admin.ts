@@ -8,7 +8,7 @@ import { listEvents } from '../store/events.ts'
 import { getMedia } from '../store/media.ts'
 import { getMessage, listMessages, statusHistory } from '../store/messages.ts'
 import { createWaba, seedFromConfig } from '../store/seed.ts'
-import { listTemplates } from '../store/templates.ts'
+import { getTemplateById, listTemplates } from '../store/templates.ts'
 import type { EventKind } from '../store/types.ts'
 import { listPhones, listWabas } from '../store/wabas.ts'
 import { coverage } from './aws.ts'
@@ -56,22 +56,35 @@ export function registerAdminApi(app: FastifyInstance, ctx: Ctx, handlers: Handl
   })
   app.post(`${prefix}/inbound`, async (request, reply) => {
     const body = (request.body ?? {}) as Record<string, any>
-    if (!['text', 'button', 'image'].includes(body.type)) return fail(reply, 400, 'type must be text, button or image')
+    if (!['text', 'button', 'image', 'interactive'].includes(body.type)) return fail(reply, 400, 'type must be text, button, image or interactive')
     try { return reply.code(201).send({ message: await sim.inbound(body as any) }) }
     catch (error) { const message = errorText(error); return fail(reply, message.startsWith('unknown phone number') ? 404 : 400, message) }
   })
   app.get(`${prefix}/templates`, async (request) => ({ templates: listTemplates(db, (request.query as { wabaId?: string }).wabaId) }))
-  for (const [action, status] of [['approve', 'APPROVED'], ['reject', 'REJECTED']] as const) {
+  for (const [action, status] of [['approve', 'APPROVED'], ['reject', 'REJECTED'], ['pause', 'PAUSED'], ['disable', 'DISABLED']] as const) {
     app.post(`${prefix}/templates/:id/${action}`, async (request, reply) => {
       const { id } = request.params as { id: string }
-      try { return { template: await sim.setTemplateStatus(id, status, (request.body as { reason?: string } | undefined)?.reason) } }
-      catch (error) { return fail(reply, 404, errorText(error)) }
+      const body = (request.body ?? {}) as { reason?: string; generation?: number; expectedStatus?: string }
+      if (body.generation !== undefined && (typeof body.generation !== 'number' || !Number.isSafeInteger(body.generation) || body.generation < 1)) return fail(reply, 400, 'generation must be a positive safe integer')
+      const current = getTemplateById(db, id)
+      if (!current) return fail(reply, 404, `template ${id} not found`)
+      const generation = body.generation ?? current.generation
+      if (generation === undefined) return fail(reply, 404, `template ${id} not found`)
+      if (typeof body.expectedStatus !== 'string' || !body.expectedStatus) return fail(reply, 400, 'expectedStatus is required')
+      try { return { template: await sim.setTemplateStatus(id, status, body.reason, generation, body.expectedStatus) } }
+      catch (error) { const message = errorText(error); return fail(reply, message.includes('has changed') ? 409 : 404, message) }
     })
   }
   app.get(`${prefix}/events`, async (request, reply) => {
     const query = request.query as Record<string, string | undefined>
     try { return { events: listEvents(db, { kind: query.kind as EventKind | undefined, wamid: query.wamid, limit: queryLimit(query.limit) }) } }
     catch (error) { return fail(reply, 400, errorText(error)) }
+  })
+  app.post(`${prefix}/events/:id/replay`, async (request, reply) => {
+    const { id } = request.params as { id: string }; const body = (request.body ?? {}) as { destination?: string }
+    if (!body.destination) return fail(reply, 400, 'destination is required')
+    try { return { event: await bus.replay(id, body.destination, ctx.clock.now()) } }
+    catch (error) { const message = errorText(error); return fail(reply, message.includes('not found') ? 404 : 400, message) }
   })
   app.get(`${prefix}/media/:id`, async (request, reply) => {
     const media = getMedia(db, (request.params as { id: string }).id)

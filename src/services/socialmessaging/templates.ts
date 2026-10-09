@@ -15,8 +15,8 @@ function parseBlobJson(blob: Uint8Array, what: string): any {
   try { return JSON.parse(Buffer.from(blob).toString('utf8')) }
   catch { throw invalid(`${what} is not valid JSON`) }
 }
-const metaTemplate = (template: TemplateRow) => ({ name: template.name, language: template.language, category: template.category, status: template.status, id: template.metaTemplateId, parameter_format: template.parameterFormat, components: template.components })
-function newTemplate(ctx: Ctx, waba: WabaRow, definition: { name: unknown; language: unknown; category: unknown; components: unknown; parameterFormat?: unknown }): TemplateRow {
+const metaTemplate = (template: TemplateRow) => ({ ...template.definition, name: template.name, language: template.language, category: template.definition?.category ?? template.category, status: template.status, id: template.metaTemplateId, parameter_format: template.definition?.parameter_format ?? template.definition?.parameterFormat ?? template.parameterFormat, components: template.components })
+function newTemplate(ctx: Ctx, waba: WabaRow, definition: Record<string, any>): TemplateRow {
   const nameError = validateTemplateName(definition.name)
   if (nameError) throw invalid(nameError)
   if (typeof definition.language !== 'string' || !definition.language) throw invalid('language is required')
@@ -27,8 +27,8 @@ function newTemplate(ctx: Ctx, waba: WabaRow, definition: { name: unknown; langu
   const now = ctx.clock.now()
   const template: TemplateRow = {
     metaTemplateId: metaNumericId(), wabaId: waba.id, name, language: definition.language,
-    category: definition.category.toUpperCase(), status: 'PENDING', parameterFormat: String(definition.parameterFormat ?? 'POSITIONAL').toUpperCase(),
-    components: definition.components as TemplateComponent[], createdAt: now, updatedAt: now,
+    category: definition.category.toUpperCase(), status: 'PENDING', parameterFormat: String(definition.parameter_format ?? definition.parameterFormat ?? 'POSITIONAL').toUpperCase(),
+    components: definition.components as TemplateComponent[], definition: { ...definition }, generation: 1, createdAt: now, updatedAt: now,
   }
   insertTemplate(ctx.db, template); ctx.sim.scheduleTemplateApproval(template); ctx.bus.notify({ type: 'template', template }); return template
 }
@@ -45,7 +45,7 @@ const created = (template: TemplateRow) => ({ metaTemplateId: template.metaTempl
 export const templateHandlers: HandlerMap = {
   CreateWhatsAppMessageTemplate(input, ctx) {
     const waba = requireWaba(ctx, input.id); const definition = parseBlobJson(input.templateDefinition, 'templateDefinition')
-    return created(newTemplate(ctx, waba, { name: definition?.name, language: definition?.language, category: definition?.category, components: definition?.components, parameterFormat: definition?.parameter_format }))
+    return created(newTemplate(ctx, waba, definition))
   },
   CreateWhatsAppMessageTemplateFromLibrary(input, ctx) {
     const waba = requireWaba(ctx, input.id); const requested = input.metaLibraryTemplate
@@ -63,7 +63,10 @@ export const templateHandlers: HandlerMap = {
     const waba = requireWaba(ctx, input.id); const template = findOne(ctx, waba, input)
     const components = input.templateComponents ? parseBlobJson(input.templateComponents, 'templateComponents') : template.components
     if (!Array.isArray(components)) throw invalid('templateComponents must be a JSON array')
-    const updated: TemplateRow = { ...template, category: input.templateCategory?.toUpperCase() ?? template.category, parameterFormat: input.parameterFormat?.toUpperCase() ?? template.parameterFormat, components, status: 'PENDING', updatedAt: ctx.clock.now() }
+    const category = input.templateCategory?.toUpperCase() ?? template.category
+    const parameterFormat = input.parameterFormat?.toUpperCase() ?? template.parameterFormat
+    const definition = { ...(template.definition ?? {}), ...(input.templateCategory ? { category: input.templateCategory } : {}), ...(input.parameterFormat ? { parameter_format: input.parameterFormat } : {}), ...(input.templateComponents ? { components } : {}) }
+    const updated: TemplateRow = { ...template, category, parameterFormat, components, definition, generation: (template.generation ?? 1) + 1, status: 'PENDING', rejectionReason: undefined, updatedAt: ctx.clock.now() }
     updateTemplate(ctx.db, updated); ctx.sim.scheduleTemplateApproval(updated); ctx.bus.notify({ type: 'template', template: updated }); return {}
   },
   DeleteWhatsAppMessageTemplate(input, ctx) {

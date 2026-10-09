@@ -35,5 +35,10 @@ sim:
       outcome: { status: failed, code: 131026 }
     - match: { to: "*1111" }
       outcome: { flow: [sent, delivered] }
+    # Immediate AWS-modeled request failures are distinct from accepted sends that later fail.
+    - match: { to: "*2222" }
+      outcome: { requestError: throttled }
+    - match: { to: "*3333" }
+      outcome: { requestError: denied }
 
 messageIdMode: uuid            # uuid | wamid

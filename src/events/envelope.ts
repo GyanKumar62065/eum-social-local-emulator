@@ -22,8 +22,9 @@ export function buildEnvelope(a: { waba: WabaRow; phone?: PhoneRow; change: Webh
 const metadata = (phone: PhoneRow) => ({ display_phone_number: digits(phone.phoneNumber), phone_number_id: phone.metaPhoneNumberId })
 const seconds = (ms: number) => String(Math.floor(ms / 1000))
 
-export function statusValue(phone: PhoneRow, msg: { wamid: string; peer: string }, status: StatusName, at: number, failure?: MetaError, category?: string): Record<string, unknown> {
+export function statusValue(phone: PhoneRow, msg: { wamid: string; peer: string; body?: Record<string, unknown> }, status: StatusName, at: number, failure?: MetaError, category?: string): Record<string, unknown> {
   const result: Record<string, unknown> = { id: msg.wamid, status, timestamp: seconds(at), recipient_id: digits(msg.peer) }
+  if (msg.body && Object.hasOwn(msg.body, 'biz_opaque_callback_data')) result.biz_opaque_callback_data = msg.body.biz_opaque_callback_data
   if (status === 'sent' || status === 'delivered') {
     const messageCategory = category ?? 'service'
     result.pricing = { billable: messageCategory !== 'service', pricing_model: 'PMP', category: messageCategory, type: 'regular' }
@@ -32,8 +33,8 @@ export function statusValue(phone: PhoneRow, msg: { wamid: string; peer: string 
   return { messaging_product: 'whatsapp', metadata: metadata(phone), statuses: [result] }
 }
 
-export function inboundValue(phone: PhoneRow, m: { wamid: string; from: string; name: string; type: string; payload: Record<string, unknown>; at: number }): Record<string, unknown> {
-  return { messaging_product: 'whatsapp', metadata: metadata(phone), contacts: [{ profile: { name: m.name }, wa_id: digits(m.from) }], messages: [{ from: digits(m.from), id: m.wamid, timestamp: seconds(m.at), type: m.type, ...m.payload }] }
+export function inboundValue(phone: PhoneRow, m: { wamid: string; from: string; name: string; type: string; payload: Record<string, unknown>; at: number; contextMessageId?: string }): Record<string, unknown> {
+  return { messaging_product: 'whatsapp', metadata: metadata(phone), contacts: [{ profile: { name: m.name }, wa_id: digits(m.from) }], messages: [{ from: digits(m.from), id: m.wamid, timestamp: seconds(m.at), type: m.type, ...(m.contextMessageId ? { context: { id: m.contextMessageId } } : {}), ...m.payload }] }
 }
 
 export function templateStatusValue(template: TemplateRow, event: string, reason?: string): Record<string, unknown> {
