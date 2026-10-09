@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import { noBlobStore, s3BlobStore, type BlobStore } from './aws/blobStore.ts'
 import { registerAwsApi } from './api/aws.ts'
 import { registerAdminApi } from './api/admin.ts'
+import { registerUi } from './api/ui.ts'
 import type { Config } from './config.ts'
 import type { Ctx, HandlerMap } from './context.ts'
 import { EventBus } from './events/bus.ts'
@@ -30,6 +31,7 @@ export async function buildApp(options: AppOptions): Promise<App> {
   const handlers = socialMessagingHandlers()
   registerAwsApi(fastify, model, handlers, ctx)
   registerAdminApi(fastify, ctx, handlers)
+  await registerUi(fastify)
   fastify.get('/_eum/health', async () => ({ status: 'ok' }))
   sim.resumePendingTemplates()
   return {

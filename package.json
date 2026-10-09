@@ -14,8 +14,8 @@
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "typecheck": "tsc --noEmit",
     "models:update": "node scripts/update-models.ts",
-    "ui:build": "vite build ui",
-    "ui:dev": "vite ui"
+    "ui:build": "vite build ui --config ui/vite.config.ts",
+    "ui:dev": "vite ui --config ui/vite.config.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1148.0",
