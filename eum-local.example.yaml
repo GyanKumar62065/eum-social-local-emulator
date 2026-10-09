@@ -1,0 +1,39 @@
+# eum-local configuration. Copy to eum-local.yaml (or point EUM_CONFIG at it).
+region: ap-south-1
+accountId: "000000000000"
+
+# LocalStack (or any AWS-compatible endpoint) for SNS event sink and S3 media.
+# Override with EUM_AWS_ENDPOINT. Omit to disable both.
+aws:
+  endpoint: http://localhost:4566
+
+wabas:
+  - name: Kapittx Dev
+    metaWabaId: "100000000000001"
+    eventDestinations:
+      - arn:aws:sns:ap-south-1:000000000000:eum-whatsapp-events
+    phoneNumbers:
+      - phoneNumber: "+919800000001"
+        displayName: Kapittx
+        metaPhoneNumberId: "200000000000001"
+    templates:
+      - name: invoice_reminder
+        language: en
+        category: UTILITY
+        components:
+          - type: BODY
+            text: "Hi {{1}}, invoice {{2}} of {{3}} is due on {{4}}."
+
+templates:
+  autoApproveSeconds: 0        # 0 = approve right away; -1 = approve manually in the UI
+
+sim:
+  defaultFlow: [sent, delivered, read]
+  stepDelayMs: 1000
+  rules:
+    - match: { to: "*0000" }
+      outcome: { status: failed, code: 131026 }
+    - match: { to: "*1111" }
+      outcome: { flow: [sent, delivered] }
+
+messageIdMode: uuid            # uuid | wamid

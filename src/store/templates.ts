@@ -1,0 +1,13 @@
+import type { Db } from './db.ts'
+import type { TemplateRow } from './types.ts'
+type Row = Record<string, any>
+const toTemplate = (r: Row): TemplateRow => ({ metaTemplateId: r.meta_template_id, wabaId: r.waba_id, name: r.name, language: r.language, category: r.category, status: r.status, parameterFormat: r.parameter_format, components: JSON.parse(r.components), createdAt: r.created_at, updatedAt: r.updated_at })
+export function insertTemplate(db: Db, t: TemplateRow): void { db.prepare('INSERT INTO template (meta_template_id, waba_id, name, language, category, status, parameter_format, components, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(t.metaTemplateId, t.wabaId, t.name, t.language, t.category, t.status, t.parameterFormat, JSON.stringify(t.components), t.createdAt, t.updatedAt) }
+export function getTemplateById(db: Db, id: string): TemplateRow | undefined { const r = db.prepare('SELECT * FROM template WHERE meta_template_id = ?').get(id) as Row | undefined; return r ? toTemplate(r) : undefined }
+export function findTemplate(db: Db, wabaId: string, name: string, language: string): TemplateRow | undefined { const r = db.prepare('SELECT * FROM template WHERE waba_id = ? AND name = ? AND language = ?').get(wabaId, name, language) as Row | undefined; return r ? toTemplate(r) : undefined }
+export function listTemplates(db: Db, wabaId?: string): TemplateRow[] { const rows = wabaId ? db.prepare('SELECT * FROM template WHERE waba_id = ? ORDER BY name, language').all(wabaId) : db.prepare('SELECT * FROM template ORDER BY waba_id, name, language').all(); return (rows as Row[]).map(toTemplate) }
+export function listTemplatesByName(db: Db, wabaId: string, name: string): TemplateRow[] { return (db.prepare('SELECT * FROM template WHERE waba_id = ? AND name = ? ORDER BY language').all(wabaId, name) as Row[]).map(toTemplate) }
+export function updateTemplate(db: Db, t: TemplateRow): void { db.prepare('UPDATE template SET category = ?, status = ?, parameter_format = ?, components = ?, updated_at = ? WHERE meta_template_id = ?').run(t.category, t.status, t.parameterFormat, JSON.stringify(t.components), t.updatedAt, t.metaTemplateId) }
+export function setTemplateStatus(db: Db, id: string, status: string, at: number): void { db.prepare('UPDATE template SET status = ?, updated_at = ? WHERE meta_template_id = ?').run(status, at, id) }
+export function deleteTemplate(db: Db, id: string): void { db.prepare('DELETE FROM template WHERE meta_template_id = ?').run(id) }
+export function listPendingTemplates(db: Db): TemplateRow[] { return (db.prepare("SELECT * FROM template WHERE status = 'PENDING'").all() as Row[]).map(toTemplate) }
