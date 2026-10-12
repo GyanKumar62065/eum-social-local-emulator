@@ -1,28 +1,40 @@
-import { useEffect, useState } from 'preact/hooks'
+import { useEffect, useMemo, useState } from 'react'
+import { Badge } from './components/ui/badge.tsx'
+import { Button } from './components/ui/button.tsx'
+import { Card } from './components/ui/card.tsx'
+import { Input } from './components/ui/input.tsx'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select.tsx'
 import { api, errorText, type Template, type Waba } from './api.ts'
-function previewText(component: Record<string, unknown>): string | undefined {
-  if (typeof component.text !== 'string') return undefined
-  const type = String(component.type).toUpperCase()
-  const example = component.example as Record<string, unknown> | undefined
-  const exampleValues = type === 'BODY' ? (example?.body_text as unknown[][] | undefined)?.[0] : type === 'HEADER' ? (example?.header_text as unknown[] | undefined) : undefined
-  return component.text.replace(/\{\{\s*(\d+)\s*\}\}/g, (whole, number: string) => String(exampleValues?.[Number(number) - 1] ?? whole))
-}
-function buttonUrl(button: Record<string, unknown>): string | undefined {
-  let raw = String(button.url ?? '')
-  const examples = button.example
-  const sample = Array.isArray(examples) ? examples[0] : typeof examples === 'string' ? examples : undefined
-  if (sample !== undefined) raw = raw.replace(/\{\{\s*\d+\s*\}\}/g, String(sample))
-  if (!raw || raw.includes('{{')) return undefined
-  try { const url = new URL(raw); return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : undefined } catch { return undefined }
-}
+import { previewBody, TemplatePreview } from './TemplatePreview.tsx'
+
 export function Templates({ wabas, tick, onError }: { wabas: Waba[]; tick: number; onError: (error: string) => void }) {
   const [templates, setTemplates] = useState<Template[]>([])
-  useEffect(() => { api.templates().then((result) => setTemplates(result.templates)).catch((error) => onError(errorText(error))) }, [tick])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('ALL')
+  useEffect(() => { api.templates().then((result) => { setTemplates(result.templates); setSelectedId((current) => current ?? result.templates[0]?.metaTemplateId ?? null) }).catch((error) => onError(errorText(error))) }, [tick])
+  const filtered = useMemo(() => templates.filter((template) => (statusFilter === 'ALL' || template.status === statusFilter) && `${template.name} ${template.category} ${template.language}`.toLowerCase().includes(search.toLowerCase())), [templates, search, statusFilter])
+  const selected = filtered.find((template) => template.metaTemplateId === selectedId) ?? filtered[0]
   const wabaName = (id: string) => wabas.find((waba) => waba.id === id)?.name ?? id
   const act = (promise: Promise<unknown>) => promise.catch((error) => onError(errorText(error)))
-  return <section class="page"><div class="page-heading"><div><div class="eyebrow">CONTENT MANAGEMENT</div><h2>Message templates</h2><p>Review simulated WhatsApp templates and control their approval state.</p></div><span class="summary-count">{templates.length} templates</span></div>
-    <table><thead><tr><th>BUSINESS ACCOUNT</th><th>TEMPLATE</th><th>LANGUAGE</th><th>CATEGORY</th><th>STATUS</th><th>BODY PREVIEW</th><th>ACTIONS</th></tr></thead><tbody>
-      {templates.map((template) => <tr key={template.metaTemplateId}><td>{wabaName(template.wabaId)}</td><td><strong>{template.name}</strong><div class="small muted">{template.metaTemplateId} · generation {template.generation ?? 1}</div>{template.rejectionReason && <div class="small">Rejection: {template.rejectionReason}</div>}</td><td>{template.language}</td><td>{template.category}</td><td><span class={`badge ${template.status.toLowerCase()}`}>{template.status}</span></td><td class="body">{template.components.map((component, index) => { const type = String(component.type).toUpperCase(); const buttonList = Array.isArray(component.buttons) ? component.buttons as Record<string, unknown>[] : []; return <div key={index}><span class="small muted">{type}</span>{previewText(component) && <div>{previewText(component)}</div>}{type === 'AUTHENTICATION' && <div>{component.add_security_recommendation ? 'Security recommendation enabled. ' : ''}{component.code_expiration_minutes !== undefined ? `Code expires in ${String(component.code_expiration_minutes)} minutes.` : ''}</div>}{buttonList.map((button, buttonIndex) => { const url = buttonUrl(button); return <div key={buttonIndex}>{String(button.text ?? button.type)}{url && <> · <a href={url} target="_blank" rel="noopener noreferrer">Open URL</a></>}</div> })}</div> })}</td><td class="actions">{template.status !== 'APPROVED' && <button onClick={() => void act(api.approve(template.metaTemplateId, template.generation ?? 1, template.status))}>Approve</button>}{template.status !== 'REJECTED' && <button class="fail-button" onClick={() => { const reason = prompt('Rejection reason', 'INVALID_FORMAT'); if (reason !== null) void act(api.reject(template.metaTemplateId, reason, template.generation ?? 1, template.status)) }}>Reject</button>}{template.status === 'APPROVED' && <button onClick={() => void act(api.setTemplateState(template.metaTemplateId, 'pause', template.generation ?? 1, template.status))}>Pause</button>}{template.status !== 'DISABLED' && <button onClick={() => void act(api.setTemplateState(template.metaTemplateId, 'disable', template.generation ?? 1, template.status))}>Disable</button>}</td></tr>)}
-    </tbody></table>
+
+  return <section className="page templates-page">
+    <div className="page-heading"><div><h1>Message templates</h1><p>Review the content and buttons your local sender can use.</p></div><span className="summary-count">{templates.length} templates</span></div>
+    <Card className="template-workspace">
+      <section className="template-browser" aria-label="Template library">
+        <div className="template-filters"><label className="template-search"><span aria-hidden="true">⌕</span><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a template" aria-label="Find a template" /></label><Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger aria-label="Filter by status" className="template-status-trigger"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">All statuses</SelectItem>{[...new Set(templates.map((template) => template.status))].sort().map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}</SelectContent></Select></div>
+        <div className="template-list">{filtered.map((template) => <Button variant="ghost" key={template.metaTemplateId} className={`template-row${template.metaTemplateId === selected?.metaTemplateId ? ' active' : ''}`} onClick={() => setSelectedId(template.metaTemplateId)}>
+          <span className={`status-dot ${template.status.toLowerCase()}`} />
+          <span className="template-row-copy"><strong>{template.name}</strong><span>{previewBody(template)}</span><small>{template.category} · {template.language}</small></span>
+          <Badge variant="outline" className={`badge ${template.status.toLowerCase()}`}>{template.status}</Badge>
+        </Button>)}{filtered.length === 0 && <div className="list-empty">No templates match these filters.</div>}</div>
+      </section>
+      {selected ? <section className="template-detail">
+        <div className="detail-heading"><div><h2>{selected.name}</h2><p>{wabaName(selected.wabaId)} <span>·</span> {selected.category} <span>·</span> {selected.language}</p></div><Badge variant="outline" className={`badge ${selected.status.toLowerCase()}`}>{selected.status}</Badge></div>
+        <div className="preview-stage"><div className="preview-label">WhatsApp preview</div><div className="phone-preview"><div className="preview-contact"><span className="avatar">{wabaName(selected.wabaId).slice(0, 2).toUpperCase()}</span><div><strong>{wabaName(selected.wabaId)}</strong><small>Business account</small></div><span className="preview-menu">•••</span></div><div className="preview-chat"><TemplatePreview template={selected} /></div><div className="preview-compose"><span>Message</span><span>＋</span></div></div><p className="preview-help">Buttons are shown as local previews. URL actions never open an external site, and Flow screens are not simulated.</p></div>
+        <div className="template-metadata"><div><span>Template ID</span><code>{selected.metaTemplateId}</code></div><div><span>Generation</span><code>{selected.generation ?? 1}</code></div>{selected.rejectionReason && <div className="rejection-note"><span>Rejection reason</span><strong>{selected.rejectionReason}</strong></div>}</div>
+        <div className="template-actions">{selected.status !== 'APPROVED' && <Button onClick={() => void act(api.approve(selected.metaTemplateId, selected.generation ?? 1, selected.status))}>Approve template</Button>}{selected.status !== 'REJECTED' && <Button variant="outline" onClick={() => { const reason = prompt('Rejection reason', 'INVALID_FORMAT'); if (reason !== null) void act(api.reject(selected.metaTemplateId, reason, selected.generation ?? 1, selected.status)) }}>Reject</Button>}{selected.status === 'APPROVED' && <Button variant="outline" onClick={() => void act(api.setTemplateState(selected.metaTemplateId, 'pause', selected.generation ?? 1, selected.status))}>Pause</Button>}{selected.status !== 'DISABLED' && <Button variant="destructive" onClick={() => void act(api.setTemplateState(selected.metaTemplateId, 'disable', selected.generation ?? 1, selected.status))}>Disable</Button>}</div>
+      </section> : <section className="template-detail list-empty">Choose a template to preview.</section>}
+    </Card>
   </section>
 }

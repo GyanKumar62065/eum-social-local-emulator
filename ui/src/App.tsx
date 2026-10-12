@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useState } from 'preact/hooks'
-import { api, errorText, onChange, type Message, type Waba } from './api.ts'
+import { useEffect, useMemo, useState } from 'react'
+import { Moon, RotateCcw, Sun } from 'lucide-react'
+import { api, errorText, onChange, type Message, type Template, type Waba } from './api.ts'
+import { Button } from './components/ui/button.tsx'
+import { Tabs, TabsList, TabsTrigger } from './components/ui/tabs.tsx'
 import { Events } from './Events.tsx'
 import { Inspector } from './Inspector.tsx'
 import { Sidebar, type Thread } from './Sidebar.tsx'
@@ -20,14 +23,14 @@ export function App() {
     const saved = localStorage.getItem('eum-social-local-emulator-theme')
     return saved === 'dark' ? 'dark' : 'light'
   })
-  const [view, setView] = useState<View>('inbox'); const [wabas, setWabas] = useState<Waba[]>([]); const [messages, setMessages] = useState<Message[]>([])
+  const [view, setView] = useState<View>('inbox'); const [wabas, setWabas] = useState<Waba[]>([]); const [messages, setMessages] = useState<Message[]>([]); const [templates, setTemplates] = useState<Template[]>([])
   const [threadKey, setThreadKey] = useState<string | null>(null); const [wamid, setWamid] = useState<string | null>(null); const [tick, setTick] = useState(0); const [error, setError] = useState<string | null>(null)
-  useEffect(() => { Promise.all([api.wabas(), api.messages()]).then(([wabaResult, messageResult]) => { setWabas(wabaResult.wabas); setMessages(messageResult.messages) }).catch((e) => setError(errorText(e))) }, [tick])
+  useEffect(() => { Promise.all([api.wabas(), api.messages(), api.templates()]).then(([wabaResult, messageResult, templateResult]) => { setWabas(wabaResult.wabas); setMessages(messageResult.messages); setTemplates(templateResult.templates) }).catch((e) => setError(errorText(e))) }, [tick])
   useEffect(() => onChange(() => setTick((value) => value + 1)), [])
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('eum-social-local-emulator-theme', theme)
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#151515' : '#ffffff')
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#161b18' : '#ffffff')
   }, [theme])
   const threads = useMemo(() => groupThreads(messages), [messages]); const thread = threads.find((item) => item.key === threadKey) ?? null
   const threadMessages = useMemo(() => thread ? messages.filter((message) => `${message.phoneNumberId}|${message.peer}` === thread.key).sort((a, b) => a.createdAt - b.createdAt) : [], [messages, thread])
@@ -35,14 +38,14 @@ export function App() {
     if (!confirm('Delete all messages, events and API-created data, then re-seed from config?')) return
     await api.reset().catch((e) => setError(errorText(e))); setThreadKey(null); setWamid(null)
   }
-  return <div class="app">
-    <header class="topbar"><div class="brand"><strong>WhatsApp inbox</strong><span>Local simulator</span></div><div class="connection"><i /> Local environment</div>
-      <nav>{(['inbox', 'templates', 'events'] as View[]).map((tab) => <button key={tab} class={view === tab ? 'tab active' : 'tab'} onClick={() => setView(tab)}>{tab}</button>)}</nav>
-      <button class="theme-toggle" aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`} onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>{theme === 'light' ? 'Dark mode' : 'Light mode'}</button>
-      <button class="reset-button" onClick={reset}><span>↻</span> Reset all</button>
+  return <div className="app">
+    <header className="topbar"><div className="brand"><strong>WhatsApp inbox</strong><span>Local simulator</span></div><div className="connection"><i /> Local environment</div>
+      <Tabs className="top-tabs" value={view} onValueChange={(value) => setView(value as View)}><TabsList aria-label="Main navigation" className="top-tabs-list"><TabsTrigger value="inbox" className="tab">Inbox</TabsTrigger><TabsTrigger value="templates" className="tab">Templates</TabsTrigger><TabsTrigger value="events" className="tab">Events</TabsTrigger></TabsList></Tabs>
+      <Button variant="outline" size="sm" className="theme-toggle" aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`} onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>{theme === 'light' ? <Moon /> : <Sun />}{theme === 'light' ? 'Dark mode' : 'Light mode'}</Button>
+      <Button variant="outline" size="sm" className="reset-button" onClick={reset}><RotateCcw /> Reset all</Button>
     </header>
-    {error && <div class="error" onClick={() => setError(null)}>{error}<span>×</span></div>}
-    {view === 'inbox' && <main class="inbox"><Sidebar wabas={wabas} threads={threads} selected={threadKey} onSelect={(key) => { setThreadKey(key); setWamid(null) }} onError={setError} /><ThreadView wabas={wabas} thread={thread} messages={threadMessages} selected={wamid} onSelect={setWamid} onError={setError} /><Inspector wamid={wamid} tick={tick} onError={setError} /></main>}
+    {error && <div className="error" onClick={() => setError(null)}>{error}<span>×</span></div>}
+    {view === 'inbox' && <main className={`inbox${thread ? ' has-thread' : ''}${wamid ? ' has-selection' : ''}`}><Sidebar wabas={wabas} threads={threads} selected={threadKey} onSelect={(key) => { setThreadKey(key); setWamid(null) }} onError={setError} /><ThreadView wabas={wabas} templates={templates} thread={thread} messages={threadMessages} selected={wamid} onSelect={setWamid} onBack={() => { setThreadKey(null); setWamid(null) }} onError={setError} /><Inspector wamid={wamid} tick={tick} templates={templates} wabas={wabas} onClose={() => setWamid(null)} onError={setError} /></main>}
     {view === 'templates' && <Templates wabas={wabas} tick={tick} onError={setError} />}
     {view === 'events' && <Events tick={tick} />}
   </div>

@@ -13,7 +13,7 @@
     "skipLibCheck": true,
     "types": ["node"],
     "jsx": "react-jsx",
-    "jsxImportSource": "preact"
+    "paths": { "@/*": ["./ui/src/*"] }
   },
   "include": ["src", "test", "scripts", "ui/src", "ui/vite.config.ts"]
 }

@@ -89,7 +89,7 @@ registered handlers) and printed in the startup log and at `GET /_eum/api/covera
 
 ## 4. Architecture
 
-One Node 24 LTS process, TypeScript, one port (default **4580**).
+One Node 24 LTS process, TypeScript, one port (default **4582**).
 
 | Path prefix | Purpose |
 |---|---|

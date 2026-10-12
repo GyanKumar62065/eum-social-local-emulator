@@ -1,6 +1,7 @@
 # EUM Social Local Emulator configuration. Copy to eum-social-local-emulator.yaml (or set EUM_CONFIG).
 region: ap-south-1
 accountId: "000000000000"
+port: 4582
 
 # LocalStack (or any AWS-compatible endpoint) for SNS event sink and S3 media.
 # Override with EUM_AWS_ENDPOINT. Omit to disable both.

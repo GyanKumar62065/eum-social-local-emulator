@@ -24,7 +24,7 @@ COPY --from=build /app/ui/dist ./ui/dist
 COPY eum-social-local-emulator.example.yaml /etc/eum-social-local-emulator/eum-social-local-emulator.yaml
 RUN mkdir -p /data && chown node:node /data
 USER node
-EXPOSE 4580
+EXPOSE 4582
 VOLUME /data
-HEALTHCHECK --interval=10s --timeout=3s CMD wget -qO- http://127.0.0.1:4580/_eum/health || exit 1
+HEALTHCHECK --interval=10s --timeout=3s CMD wget -qO- http://127.0.0.1:4582/_eum/health || exit 1
 CMD ["node", "src/main.ts"]

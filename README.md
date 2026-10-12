@@ -37,8 +37,8 @@ cp eum-social-local-emulator.example.yaml eum-social-local-emulator.yaml
 EUM_CONFIG=./eum-social-local-emulator.yaml bun run start
 ```
 
-The server listens on `http://localhost:4580`. Open the inbox at
-[http://localhost:4580](http://localhost:4580). On startup, the terminal prints seeded AWS resource
+The server listens on `http://localhost:4582`. Open the inbox at
+[http://localhost:4582](http://localhost:4582). On startup, the terminal prints seeded AWS resource
 IDs; use those IDs in your application calls. The default region is `ap-south-1`; local credentials
 such as `test` / `test` are accepted because the emulator does not authenticate AWS requests.
 
@@ -80,7 +80,7 @@ import { SocialMessagingClient } from '@aws-sdk/client-socialmessaging'
 
 const socialMessaging = new SocialMessagingClient({
   region: 'ap-south-1',
-  endpoint: process.env.EUM_ENDPOINT ?? 'http://localhost:4580',
+  endpoint: process.env.EUM_ENDPOINT ?? 'http://localhost:4582',
   credentials: {
     accessKeyId: 'test',
     secretAccessKey: 'test',
@@ -99,7 +99,7 @@ is included in the source repository under `test/java`:
 
 ```sh
 cd test/java
-mvn compile exec:java -Dexec.args="http://localhost:4580 PHONE_NUMBER_ID"
+mvn compile exec:java -Dexec.args="http://localhost:4582 PHONE_NUMBER_ID"
 ```
 
 It exercises phone-number lookup, template sending, and modeled error handling. Replace
@@ -112,7 +112,7 @@ another file. If no file exists, it starts with defaults and no seeded WABAs.
 
 | YAML key | Default | Purpose |
 | --- | --- | --- |
-| `port` | `4580` | HTTP port |
+| `port` | `4582` | HTTP port |
 | `host` | `127.0.0.1` | Bind address; loopback keeps the local admin API off the network by default |
 | `dbPath` | `./data/eum-local.db` | SQLite database path |
 | `region` | `ap-south-1` | Region used in generated ARNs and SDK integration |
@@ -184,7 +184,7 @@ import {
   SocialMessagingClient,
 } from '@aws-sdk/client-socialmessaging'
 
-const endpoint = process.env.EUM_ENDPOINT ?? 'http://localhost:4580'
+const endpoint = process.env.EUM_ENDPOINT ?? 'http://localhost:4582'
 const client = new SocialMessagingClient({
   region: 'ap-south-1', endpoint,
   credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
@@ -284,7 +284,7 @@ events. This file is in the source repository and is not included in the npm pac
 docker compose -f docker-compose.example.yml up --build
 ```
 
-The inbox is available at `http://localhost:4580`. The LocalStack endpoint is
+The inbox is available at `http://localhost:4582`. The LocalStack endpoint is
 `http://localhost:4566`. To run the opt-in SNS-to-SQS integration check when LocalStack is running:
 
 ```sh

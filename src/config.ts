@@ -49,7 +49,7 @@ export function parseConfig(text: string | undefined, env: Record<string, string
   const messageIdMode = raw.messageIdMode ?? 'uuid'
   if (messageIdMode !== 'uuid' && messageIdMode !== 'wamid') fail('messageIdMode must be uuid or wamid')
   const awsEndpoint = env.EUM_AWS_ENDPOINT ?? raw.aws?.endpoint
-  const port = Number(env.EUM_PORT ?? raw.port ?? 4580)
+  const port = Number(env.EUM_PORT ?? raw.port ?? 4582)
   if (!Number.isInteger(port) || port < 1 || port > 65535) fail('port must be an integer from 1 to 65535')
   return {
     port, host: env.EUM_HOST ?? raw.host ?? '127.0.0.1', dbPath: env.EUM_DB ?? raw.dbPath ?? './data/eum-local.db',

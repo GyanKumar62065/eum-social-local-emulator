@@ -17,7 +17,7 @@ services:
 
   eum-social-local-emulator:
     build: .
-    ports: ["4580:4580"]
+    ports: ["4582:4582"]
     environment:
       EUM_AWS_ENDPOINT: http://localstack:4566
     volumes:
