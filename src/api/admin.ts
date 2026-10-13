@@ -6,7 +6,7 @@ import { metaError } from '../domain/metaErrors.ts'
 import { resetDb } from '../store/db.ts'
 import { listEvents } from '../store/events.ts'
 import { getMedia } from '../store/media.ts'
-import { getMessage, listMessages, statusHistory } from '../store/messages.ts'
+import { correlatedMessages, getMessage, listMessages, statusHistory } from '../store/messages.ts'
 import { createWaba, seedFromConfig } from '../store/seed.ts'
 import { getTemplateById, listTemplates } from '../store/templates.ts'
 import type { EventKind } from '../store/types.ts'
@@ -43,7 +43,7 @@ export function registerAdminApi(app: FastifyInstance, ctx: Ctx, handlers: Handl
   app.get(`${prefix}/messages/:wamid`, async (request, reply) => {
     const { wamid } = request.params as { wamid: string }; const message = getMessage(db, wamid)
     if (!message) return fail(reply, 404, `message ${wamid} not found`)
-    return { message, history: statusHistory(db, wamid), events: listEvents(db, { wamid }) }
+    return { message, history: statusHistory(db, wamid), events: listEvents(db, { wamid }), relatedMessages: correlatedMessages(db, message) }
   })
   app.post(`${prefix}/messages/:wamid/status`, async (request, reply) => {
     const { wamid } = request.params as { wamid: string }; const body = (request.body ?? {}) as { status?: string; code?: number; title?: string }
@@ -85,6 +85,19 @@ export function registerAdminApi(app: FastifyInstance, ctx: Ctx, handlers: Handl
     if (!body.destination) return fail(reply, 400, 'destination is required')
     try { return { event: await bus.replay(id, body.destination, ctx.clock.now()) } }
     catch (error) { const message = errorText(error); return fail(reply, message.includes('not found') ? 404 : 400, message) }
+  })
+  app.get(`${prefix}/media/:id/metadata`, async (request, reply) => {
+    const media = getMedia(db, (request.params as { id: string }).id)
+    if (!media) return fail(reply, 404, 'media not found')
+    return { mediaId: media.mediaId, mimeType: media.mimeType, size: media.bytes.byteLength, sha256: media.sha256, available: true }
+  })
+  app.get(`${prefix}/media/:id/download`, async (request, reply) => {
+    const media = getMedia(db, (request.params as { id: string }).id)
+    if (!media) return fail(reply, 404, 'media not found')
+    const requested = (request.query as { filename?: string }).filename ?? 'document'
+    const filename = requested.replace(/[\\/\u0000-\u001f\u007f";]/g, '_').trim().slice(0, 240) || 'document'
+    const encoded = encodeURIComponent(filename).replace(/['()]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`)
+    return reply.type(media.mimeType).header('content-length', String(media.bytes.byteLength)).header('content-disposition', `attachment; filename="${filename}"; filename*=UTF-8''${encoded}`).send(Buffer.from(media.bytes))
   })
   app.get(`${prefix}/media/:id`, async (request, reply) => {
     const media = getMedia(db, (request.params as { id: string }).id)

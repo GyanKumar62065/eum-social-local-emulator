@@ -21,7 +21,11 @@ export function ThreadView({ wabas, templates, thread, messages, selected, onSel
 
   const activeThread = thread
   const phone = wabas.flatMap((waba) => waba.phoneNumbers).find((item) => item.id === activeThread.phoneNumberId)
-  const templateFor = (message: Message) => templates.find((template) => template.wabaId === phone?.wabaId && template.name === message.body?.template?.name && template.language === message.body?.template?.language?.code)
+  const templateFor = (message: Message) => {
+    const snapshot = message.trace?.template
+    if (snapshot?.components) return { metaTemplateId: `snapshot-${message.wamid}`, wabaId: phone?.wabaId ?? '', name: snapshot.name, language: snapshot.language, category: 'UTILITY', status: 'APPROVED', generation: snapshot.generation ?? 0, components: snapshot.components }
+    return templates.find((template) => template.wabaId === phone?.wabaId && template.name === message.body?.template?.name && template.language === message.body?.template?.language?.code)
+  }
 
   async function reply(body: string, asType: typeof replyType = replyType, contextMessageId?: string) {
     if (!body.trim() && asType === 'text') return

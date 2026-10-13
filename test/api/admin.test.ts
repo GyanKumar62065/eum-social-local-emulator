@@ -1,4 +1,5 @@
 import { SendWhatsAppMessageCommand } from '@aws-sdk/client-socialmessaging'
+import { createHash } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { entry, PHONE_ID, startHarness, utf8, WABA_ID, type Harness } from '../helpers.ts'
 let h: Harness
@@ -38,6 +39,20 @@ describe('admin API', () => {
   })
   it('serves stored media bytes', async () => {
     const message = await h.app.ctx.sim.inbound({ phoneNumberId: PHONE_ID, from: '+1555', type: 'image', mediaBase64: Buffer.from('img').toString('base64'), mimeType: 'image/png' }); const response = await fetch(`${h.url}/_eum/api/media/${message.body.image.id}`); expect(response.headers.get('content-type')).toBe('image/png'); expect(Buffer.from(await response.arrayBuffer()).toString()).toBe('img')
+  })
+  it('returns media metadata and an exact-byte download with a safe filename', async () => {
+    const original = Buffer.from('%PDF document payload\n')
+    const message = await h.app.ctx.sim.inbound({ phoneNumberId: PHONE_ID, from: '+1555', type: 'image', mediaBase64: original.toString('base64'), mimeType: 'image/png' })
+    const id = message.body.image.id
+    const metadata = await api('GET', `/media/${id}/metadata`)
+    expect(metadata).toMatchObject({ status: 200, json: { mediaId: id, mimeType: 'image/png', size: original.byteLength, sha256: createHash('sha256').update(original).digest('base64'), available: true } })
+    const response = await fetch(`${h.url}/_eum/api/media/${id}/download?filename=invoice.pdf`)
+    const downloaded = Buffer.from(await response.arrayBuffer())
+    expect(response.headers.get('content-disposition')).toContain('filename="invoice.pdf"')
+    expect(createHash('sha256').update(downloaded).digest('base64')).toBe(createHash('sha256').update(original).digest('base64'))
+    expect(downloaded).toEqual(original)
+    expect((await fetch(`${h.url}/_eum/api/media/deleted/metadata`)).status).toBe(404)
+    expect((await fetch(`${h.url}/_eum/api/media/deleted/download`)).status).toBe(404)
   })
   it('resets data, cancels scheduled deliveries and re-seeds (Review Focus 2)', async () => {
     await sendTemplate(); expect((await api('POST', '/reset', {})).json).toEqual({ ok: true }); await h.clock.advance(10_000); expect(h.published).toEqual([]); expect((await api('GET', '/messages')).json.messages).toEqual([]); expect((await api('GET', '/wabas')).json.wabas[0].id).toBe(WABA_ID)

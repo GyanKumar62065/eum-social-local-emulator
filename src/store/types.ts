@@ -7,7 +7,9 @@ export interface PhoneRow { id: string; arn: string; wabaId: string; metaPhoneNu
 export interface TemplateComponent { type: string; text?: string; format?: string; [key: string]: unknown }
 export interface TemplateRow { metaTemplateId: string; wabaId: string; name: string; language: string; category: string; status: string; parameterFormat: string; components: TemplateComponent[]; definition?: Record<string, unknown>; generation?: number; rejectionReason?: string; createdAt: number; updatedAt: number }
 export type MessageStatus = 'accepted' | 'received' | StatusName
-export interface MessageRow { wamid: string; awsMessageId?: string; phoneNumberId: string; direction: 'out' | 'in'; peer: string; type: string; body: any; renderedText?: string; category?: string; status: MessageStatus; errorCode?: number; errorTitle?: string; createdAt: number }
+export interface MessageTrace { operation: string; request: Record<string, unknown>; response: Record<string, unknown>; template?: { name: string; language: string; generation?: number; headerFormat?: string; components?: TemplateComponent[] }; mediaValidation?: { result: 'valid'; mediaId: string; filename: string; mimeType: string; size: number; sha256: string } }
+export interface CorrelatedMessage { wamid: string; direction: 'out' | 'in'; type: string; status: MessageStatus; renderedText?: string; createdAt: number }
+export interface MessageRow { wamid: string; awsMessageId?: string; phoneNumberId: string; direction: 'out' | 'in'; peer: string; type: string; body: any; renderedText?: string; category?: string; status: MessageStatus; errorCode?: number; errorTitle?: string; trace?: MessageTrace; createdAt: number }
 export interface StatusHistoryRow { status: string; errorCode?: number; at: number }
 export interface MediaRow { mediaId: string; ownerId: string; mimeType: string; sha256: string; bytes: Uint8Array; createdAt: number }
 export interface Tag { key: string; value?: string }

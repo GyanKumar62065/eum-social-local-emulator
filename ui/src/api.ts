@@ -1,10 +1,12 @@
 export interface Phone { id: string; wabaId: string; phoneNumber: string; displayName: string; metaPhoneNumberId: string }
 export interface Waba { id: string; name: string; metaWabaId: string; registrationStatus: string; eventDestinations: { eventDestinationArn: string }[]; phoneNumbers: Phone[] }
-export interface Message { wamid: string; awsMessageId?: string; phoneNumberId: string; direction: 'out' | 'in'; peer: string; type: string; body: any; renderedText?: string; status: string; errorCode?: number; errorTitle?: string; createdAt: number }
+export interface Message { wamid: string; awsMessageId?: string; phoneNumberId: string; direction: 'out' | 'in'; peer: string; type: string; body: any; renderedText?: string; status: string; errorCode?: number; errorTitle?: string; trace?: { operation: string; request: Record<string, unknown>; response: Record<string, unknown>; template?: { name: string; language: string; generation?: number; headerFormat?: string; components?: { type: string; text?: string; [key: string]: unknown }[] }; mediaValidation?: { result: 'valid'; mediaId: string; filename: string; mimeType: string; size: number; sha256: string } }; createdAt: number }
+export interface CorrelatedMessage { wamid: string; direction: 'out' | 'in'; type: string; status: string; renderedText?: string; createdAt: number }
 export interface Template { metaTemplateId: string; wabaId: string; name: string; language: string; category: string; status: string; generation: number; rejectionReason?: string; components: { type: string; text?: string; [key: string]: unknown }[] }
 export interface Delivery { destination: string; ok: boolean; detail: string }
 export interface EventRow { id: string; kind: string; wamid?: string; envelope: { whatsAppWebhookEntry: string; [key: string]: unknown }; deliveries: Delivery[]; deliveryAttempts?: { destination: string; attempts: { at: number; ok: boolean; detail: string }[] }[]; at: number }
-export interface MessageDetail { message: Message; history: { status: string; errorCode?: number; at: number }[]; events: EventRow[] }
+export interface MessageDetail { message: Message; history: { status: string; errorCode?: number; at: number }[]; events: EventRow[]; relatedMessages: CorrelatedMessage[] }
+export interface MediaMetadata { mediaId: string; mimeType: string; size: number; sha256: string; available: boolean }
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const response = await fetch(`/_eum/api${path}`, { method, headers: body === undefined ? {} : { 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) })
@@ -16,6 +18,7 @@ export const api = {
   wabas: () => call<{ wabas: Waba[] }>('GET', '/wabas'),
   messages: () => call<{ messages: Message[] }>('GET', '/messages?limit=1000'),
   message: (wamid: string) => call<MessageDetail>('GET', `/messages/${encodeURIComponent(wamid)}`),
+  mediaMetadata: (mediaId: string) => call<MediaMetadata>('GET', `/media/${encodeURIComponent(mediaId)}/metadata`),
   setStatus: (wamid: string, status: string, code?: number) => call('POST', `/messages/${encodeURIComponent(wamid)}/status`, { status, code }),
   inbound: (body: { phoneNumberId: string; from: string; type: 'text' | 'button' | 'image' | 'interactive'; text?: string; payload?: string; interactiveType?: 'button_reply' | 'list_reply'; id?: string; title?: string; description?: string; contextMessageId?: string; mediaBase64?: string; mimeType?: string }) => call<{ message: Message }>('POST', '/inbound', body),
   templates: () => call<{ templates: Template[] }>('GET', '/templates'),

@@ -1,13 +1,14 @@
 import { createHash } from 'node:crypto'
 import type { Ctx, HandlerMap } from '../../context.ts'
 import { metaNumericId } from '../../domain/ids.ts'
+import { validateMediaUpload } from '../../domain/media.ts'
 import { invalid, notFound } from '../../smithy/errors.ts'
 import { deleteMedia, getMedia, insertMedia } from '../../store/media.ts'
 import type { MediaRow } from '../../store/types.ts'
 import { guessMime, readS3, writeS3 } from './s3io.ts'
 import { requirePhone } from './waba.ts'
 
-export const MAX_MEDIA_BYTES = 100 * 1024 * 1024
+export const MAX_MEDIA_BYTES = 100_000_000
 const reason = (error: unknown) => error instanceof Error ? error.message : String(error)
 function requireS3Url(value: string): URL {
   let url: URL
@@ -53,7 +54,8 @@ function requireMedia(ctx: Ctx, phoneId: string, mediaId: string): MediaRow {
 export const mediaHandlers: HandlerMap = {
   async PostWhatsAppMessageMedia(input, ctx) {
     const { phone } = requirePhone(ctx, input.originationPhoneNumberId); const { bytes, mimeType } = await fetchSource(ctx, input)
-    if (bytes.byteLength > MAX_MEDIA_BYTES) throw invalid(`Media is ${bytes.byteLength} bytes; the limit is ${MAX_MEDIA_BYTES}`)
+    const mediaError = validateMediaUpload(mimeType, bytes)
+    if (mediaError) throw invalid(mediaError)
     const mediaId = metaNumericId()
     insertMedia(ctx.db, { mediaId, ownerId: phone.id, mimeType, sha256: createHash('sha256').update(bytes).digest('base64'), bytes, createdAt: ctx.clock.now() })
     return { mediaId }

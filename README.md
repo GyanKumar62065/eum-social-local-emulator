@@ -155,10 +155,14 @@ The current implementation simulates these AWS End User Messaging Social operati
 - `GetLinkedWhatsAppBusinessAccountPhoneNumber`
 - `PutWhatsAppBusinessAccountEventDestinations`
 - `CreateWhatsAppMessageTemplate`
+- `CreateWhatsAppMessageTemplateMedia`
 - `UpdateWhatsAppMessageTemplate`
 - `GetWhatsAppMessageTemplate`
 - `ListWhatsAppMessageTemplates`
 - `SendWhatsAppMessage`
+- `PostWhatsAppMessageMedia`
+- `GetWhatsAppMessageMedia`
+- `DeleteWhatsAppMessageMedia`
 
 Other operations present in the vendored service model return a modeled `501` response. The
 emulator does not claim complete AWS service coverage. Synchronous invalid requests return modeled
@@ -167,6 +171,47 @@ An unknown or inactive template is rejected synchronously. A structurally valid 
 template parameter count is wrong can still be accepted by the AWS API simulation and then produce
 a Meta-style failed status event, preserving the distinction between API rejection and later
 provider delivery failure.
+
+### WhatsApp template document headers
+
+Document-header templates use two distinct media records:
+
+1. Upload the approval sample with `CreateWhatsAppMessageTemplateMedia`, then include its
+   `metaHeaderHandle` as the single `HEADER` component's `example.header_handle` value when
+   creating or updating the template. The handle must belong to the same WABA and use a MIME
+   type compatible with the header format.
+2. After approval, upload the actual recipient attachment with `PostWhatsAppMessageMedia` using
+   the sending phone number. Send that returned `mediaId` in a single `header` document parameter.
+   The emulator checks that the media exists, is owned by that phone number, and is compatible
+   with the approved header before accepting the send.
+
+The local inbox shows the actual send-time attachment, filename, MIME type, size and download
+control. Downloads return the stored bytes. The message inspector records the template generation,
+media ID, validation result, SHA-256 and size. Removing the stored media makes the inbox display an
+unavailable state; it never falls back to the approval sample.
+
+| Media type | MIME types | Maximum size |
+| --- | --- | ---: |
+| Documents | `text/plain`, `application/pdf`, `application/msword`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `application/vnd.ms-excel`, `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, `application/vnd.ms-powerpoint`, `application/vnd.openxmlformats-officedocument.presentationml.presentation` | 100 MB |
+| Images | JPEG, PNG | 5 MB |
+| Audio | `audio/aac`, `audio/amr`, `audio/mpeg`, `audio/mp4`, `audio/ogg` | 16 MB |
+| Video | `video/mp4`, `video/3gp` | 16 MB |
+| Static WebP sticker | WebP | 100 KB |
+| Animated WebP sticker | WebP | 500 KB |
+
+Limits use decimal bytes as documented by AWS (for example, 100 MB is 100,000,000 bytes). Uploads
+are checked using their actual byte count. KAI may impose its own stricter aggregate attachment
+limits; those application rules are outside the emulator.
+
+Malformed/missing headers and incompatible MIME types return the modeled
+`InvalidParametersException` (HTTP 400). Unknown or media owned by another sending phone returns
+`ResourceNotFoundException` (HTTP 404). These are the emulator's selected AWS API error mappings;
+the provider API references enumerate the operation error types but do not specify a unique
+mapping for each local media-validation case. Rejected sends do not create messages or
+delivery/read events. The emulator still simulates template approval, status callbacks, and inbound
+replies locally; none of these results establish real Meta approval or WhatsApp delivery.
+
+Provider references: [AWS supported media types and sizes](https://docs.aws.amazon.com/social-messaging/latest/userguide/supported-media-types.html), [CreateWhatsAppMessageTemplateMedia](https://docs.aws.amazon.com/social-messaging/latest/APIReference/API_CreateWhatsAppMessageTemplateMedia.html), [PostWhatsAppMessageMedia](https://docs.aws.amazon.com/social-messaging/latest/APIReference/API_PostWhatsAppMessageMedia.html), and [SendWhatsAppMessage](https://docs.aws.amazon.com/social-messaging/latest/APIReference/API_SendWhatsAppMessage.html).
 
 ## Generic SDK walkthrough
 

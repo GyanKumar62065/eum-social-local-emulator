@@ -45,7 +45,7 @@ export function App() {
       <Button variant="outline" size="sm" className="reset-button" onClick={reset}><RotateCcw /> Reset all</Button>
     </header>
     {error && <div className="error" onClick={() => setError(null)}>{error}<span>×</span></div>}
-    {view === 'inbox' && <main className={`inbox${thread ? ' has-thread' : ''}${wamid ? ' has-selection' : ''}`}><Sidebar wabas={wabas} threads={threads} selected={threadKey} onSelect={(key) => { setThreadKey(key); setWamid(null) }} onError={setError} /><ThreadView wabas={wabas} templates={templates} thread={thread} messages={threadMessages} selected={wamid} onSelect={setWamid} onBack={() => { setThreadKey(null); setWamid(null) }} onError={setError} /><Inspector wamid={wamid} tick={tick} templates={templates} wabas={wabas} onClose={() => setWamid(null)} onError={setError} /></main>}
+    {view === 'inbox' && <main className={`inbox${thread ? ' has-thread' : ''}${wamid ? ' has-selection' : ''}`}><Sidebar wabas={wabas} threads={threads} selected={threadKey} onSelect={(key) => { setThreadKey(key); setWamid(null) }} onError={setError} /><ThreadView wabas={wabas} templates={templates} thread={thread} messages={threadMessages} selected={wamid} onSelect={setWamid} onBack={() => { setThreadKey(null); setWamid(null) }} onError={setError} /><Inspector wamid={wamid} tick={tick} templates={templates} wabas={wabas} onClose={() => setWamid(null)} onSelectMessage={setWamid} onError={setError} /></main>}
     {view === 'templates' && <Templates wabas={wabas} tick={tick} onError={setError} />}
     {view === 'events' && <Events tick={tick} />}
   </div>

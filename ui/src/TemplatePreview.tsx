@@ -1,5 +1,7 @@
-import { useState } from 'react'
-import type { Message, Template } from './api.ts'
+import { useEffect, useState } from 'react'
+import { Download, FileText } from 'lucide-react'
+import type { MediaMetadata, Message, Template } from './api.ts'
+import { api } from './api.ts'
 import { Button } from './components/ui/button.tsx'
 import { Card } from './components/ui/card.tsx'
 
@@ -32,7 +34,7 @@ function componentText(component: Component, message: Message | undefined): stri
   return replaceValues(component.text, values)
 }
 
-function buttonDestination(button: Button, index: number, message: Message | undefined): string {
+export function resolveButtonDestination(button: Record<string, unknown>, index: number, message: Message | undefined): string {
   const sample = Array.isArray(button.example) ? button.example[0] : undefined
   const parameters = message ? parametersFor(message, 'BUTTON', index) : sample === undefined ? {} : { 0: sample }
   return replaceValues(button.url, parameters)
@@ -47,6 +49,7 @@ export function TemplatePreview({ template, message, onQuickReply, compact = fal
   const [openDestination, setOpenDestination] = useState<number | null>(null)
   const [flowPreview, setFlowPreview] = useState<number | null>(null)
   const [copied, setCopied] = useState(false)
+  const [documentMedia, setDocumentMedia] = useState<MediaMetadata | null>(null)
   const buttonsComponent = template.components.find((component) => ['BUTTONS', 'AUTHENTICATION'].includes(String(component.type).toUpperCase()) && Array.isArray(component.buttons))
   const buttons = Array.isArray(buttonsComponent?.buttons) ? buttonsComponent.buttons as Button[] : []
   const header = template.components.find((component) => String(component.type).toUpperCase() === 'HEADER')
@@ -55,9 +58,23 @@ export function TemplatePreview({ template, message, onQuickReply, compact = fal
   const auth = template.components.find((component) => String(component.type).toUpperCase() === 'AUTHENTICATION')
   const authBodyExample = body?.example as Record<string, unknown> | undefined
   const authCode = parametersFor(message, 'BODY')[0]?.text ?? (authBodyExample?.body_text as unknown[][] | undefined)?.[0]?.[0] ?? '••••••'
+  const document = parametersFor(message, 'HEADER')[0]?.document
+  const mediaId = typeof document?.id === 'string' ? document.id : undefined
+  const filename = typeof document?.filename === 'string' && document.filename.trim() ? document.filename : message?.trace?.mediaValidation?.filename ?? 'document'
+  useEffect(() => {
+    let active = true
+    if (!mediaId) { setDocumentMedia(message ? { mediaId: '', mimeType: '', size: 0, sha256: '', available: false } : null); return () => { active = false } }
+    setDocumentMedia(null)
+    api.mediaMetadata(mediaId).then((metadata) => { if (active) setDocumentMedia(metadata) }).catch(() => { if (active) setDocumentMedia({ mediaId, mimeType: '', size: 0, sha256: '', available: false }) })
+    return () => { active = false }
+  }, [mediaId, message])
+  const formatSize = (bytes: number) => bytes >= 1_000_000 ? `${(bytes / 1_000_000).toFixed(2)} MB` : bytes >= 1_000 ? `${(bytes / 1_000).toFixed(1)} KB` : `${bytes} B`
 
   return <Card className={`wa-card${compact ? ' compact' : ''}`}>
-    {header && <div className="wa-header">{header.format === 'IMAGE' ? <div className="wa-media-placeholder">Image header</div> : header.format === 'VIDEO' ? <div className="wa-media-placeholder">Video header</div> : header.format === 'DOCUMENT' ? <div className="wa-media-placeholder">Document header</div> : <strong>{componentText(header, message)}</strong>}</div>}
+    {header && <div className="wa-header">{header.format === 'IMAGE' ? <div className="wa-media-placeholder">Image header</div> : header.format === 'VIDEO' ? <div className="wa-media-placeholder">Video header</div> : header.format === 'DOCUMENT' ? message ? <div className={`wa-document${documentMedia?.available === false ? ' unavailable' : ''}`}>
+      <span className="wa-document-icon"><FileText aria-hidden="true" /></span><span className="wa-document-info"><strong title={filename}>{filename}</strong><small>{documentMedia?.available ? `${documentMedia.mimeType} · ${formatSize(documentMedia.size)}` : documentMedia ? 'Attachment unavailable' : 'Loading attachment details…'}</small></span>
+      {documentMedia?.available && mediaId ? <a className="wa-document-download" href={`/_eum/api/media/${encodeURIComponent(mediaId)}/download?filename=${encodeURIComponent(filename)}`} download={filename} aria-label={`Download ${filename}`} title={`Download ${filename}`}><Download aria-hidden="true" /></a> : <span className="wa-document-state">{documentMedia ? 'Unavailable' : '…'}</span>}
+    </div> : <div className="wa-media-placeholder">Document header · approval sample preview</div> : <strong>{componentText(header, message)}</strong>}</div>}
     {auth && <div className="wa-auth-code"><span>Authentication code</span><strong>{String(authCode)}</strong>{auth.add_security_recommendation === true && <small>For your security, do not share this code.</small>}</div>}
     {body && <div className="wa-body">{componentText(body, message)}</div>}
     {footer && <div className="wa-footer">{componentText(footer, message)}</div>}
@@ -67,7 +84,7 @@ export function TemplatePreview({ template, message, onQuickReply, compact = fal
       const label = String(button.text ?? button.otp_type ?? (kind === 'FLOW' ? 'Open flow' : 'Button'))
       if (kind === 'URL') return <div className="wa-action-wrap" key={index}>
         <Button variant="ghost" className="wa-action" onClick={() => setOpenDestination(openDestination === index ? null : index)}>{label}<span aria-hidden="true">↗</span></Button>
-        {openDestination === index && <div className="local-action-note"><span>Local link preview</span><code>{buttonDestination(button, index, message) || 'Destination uses template parameters'}</code><small>This preview does not open a browser or contact the destination.</small></div>}
+        {openDestination === index && <div className="local-action-note"><span>Local link preview</span><code>{resolveButtonDestination(button, index, message) || 'Destination uses template parameters'}</code><small>This preview does not open a browser or contact the destination.</small></div>}
       </div>
       if (kind === 'FLOW') return <div className="wa-action-wrap" key={index}>
         <Button variant="ghost" className="wa-action" onClick={() => setFlowPreview(flowPreview === index ? null : index)}>{label}<span aria-hidden="true">▤</span></Button>

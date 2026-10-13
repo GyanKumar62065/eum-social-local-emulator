@@ -1,4 +1,9 @@
 import type { TemplateComponent, TemplateRow } from '../store/types.ts'
+import type { Db } from '../store/db.ts'
+import { getMedia } from '../store/media.ts'
+import type { MediaRow } from '../store/types.ts'
+import { invalid, notFound } from '../smithy/errors.ts'
+import { defaultDocumentFilename, isMimeCompatibleWithHeader, validateMediaUpload } from './media.ts'
 import { metaError, type MetaError } from './metaErrors.ts'
 
 const PLACEHOLDER = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g
@@ -101,6 +106,26 @@ export function checkTemplateSend(template: TemplateRow | undefined, body: any):
     }
   }
   return null
+}
+export function resolveDocumentHeader(template: TemplateRow, body: any, db: Db, phoneId: string): { media: MediaRow; filename: string } | undefined {
+  const templateHeaders = template.components.filter((component) => String(component.type).toUpperCase() === 'HEADER')
+  const documentHeaders = templateHeaders.filter((component) => String(component.format).toUpperCase() === 'DOCUMENT')
+  if (documentHeaders.length === 0) return undefined
+  if (templateHeaders.length !== 1 || documentHeaders.length !== 1) throw invalid('Approved template must contain exactly one DOCUMENT HEADER')
+  const sendComponents = (body?.template?.components ?? []).filter((component: any) => String(component?.type).toUpperCase() === 'HEADER')
+  if (sendComponents.length !== 1) throw invalid('DOCUMENT template send requires exactly one header component')
+  const parameters = sendComponents[0]?.parameters
+  if (!Array.isArray(parameters) || parameters.length !== 1 || String(parameters[0]?.type).toLowerCase() !== 'document') throw invalid('DOCUMENT header requires exactly one document parameter')
+  const mediaId = parameters[0]?.document?.id
+  if (typeof mediaId !== 'string' || !mediaId.trim()) throw invalid('DOCUMENT header document.id is required')
+  const media = getMedia(db, mediaId)
+  if (!media || media.ownerId !== phoneId) throw notFound(`Phone-owned runtime media ${mediaId}`)
+  if (!isMimeCompatibleWithHeader('DOCUMENT', media.mimeType)) throw invalid(`Runtime media MIME type ${media.mimeType} is incompatible with DOCUMENT header`)
+  const mediaError = validateMediaUpload(media.mimeType, media.bytes)
+  if (mediaError) throw invalid(mediaError)
+  const suppliedName = typeof parameters[0].document.filename === 'string' ? parameters[0].document.filename : ''
+  const filename = suppliedName.replace(/[\\/\u0000-\u001f\u007f]/g, '_').trim().slice(0, 240) || defaultDocumentFilename(media.mimeType)
+  return { media, filename }
 }
 export function validateTemplateName(name: unknown): string | null {
   return typeof name === 'string' && /^[a-z0-9_]{1,512}$/.test(name) ? null : 'Template name must be 1-512 characters of lowercase letters, digits and underscores'

@@ -2,9 +2,10 @@ import { createHash, randomBytes } from 'node:crypto'
 import type { Ctx, HandlerMap } from '../../context.ts'
 import { metaNumericId } from '../../domain/ids.ts'
 import { paginate } from '../../domain/paging.ts'
+import { isMimeCompatibleWithHeader, validateMediaUpload } from '../../domain/media.ts'
 import { validateTemplateName } from '../../domain/templates.ts'
 import { invalid, notFound } from '../../smithy/errors.ts'
-import { insertMedia } from '../../store/media.ts'
+import { getMedia, insertMedia } from '../../store/media.ts'
 import { deleteTemplate, findTemplate, getTemplateById, insertTemplate, listTemplates, listTemplatesByName, updateTemplate } from '../../store/templates.ts'
 import type { TemplateComponent, TemplateRow, WabaRow } from '../../store/types.ts'
 import { LIBRARY, libraryComponents } from './library.ts'
@@ -15,6 +16,27 @@ function parseBlobJson(blob: Uint8Array, what: string): any {
   try { return JSON.parse(Buffer.from(blob).toString('utf8')) }
   catch { throw invalid(`${what} is not valid JSON`) }
 }
+function validateHeaders(ctx: Ctx, waba: WabaRow, components: unknown): asserts components is TemplateComponent[] {
+  if (!Array.isArray(components)) throw invalid('components must be an array')
+  const headers = components.filter((component) => String(component?.type).toUpperCase() === 'HEADER') as Record<string, any>[]
+  if (headers.length > 1) throw invalid('A template can contain only one HEADER component')
+  const header = headers[0]
+  if (!header) return
+  const format = String(header.format ?? '').toUpperCase()
+  if (!['TEXT', 'IMAGE', 'VIDEO', 'DOCUMENT'].includes(format)) throw invalid(`Unsupported template HEADER format ${format || '(missing)'}`)
+  if (format === 'TEXT') {
+    if (typeof header.text !== 'string' || !header.text.trim()) throw invalid('TEXT header requires non-empty text')
+    if (header.example?.header_handle !== undefined) throw invalid('TEXT header cannot contain example.header_handle media')
+    return
+  }
+  const handles = header.example?.header_handle
+  if (!Array.isArray(handles) || handles.length !== 1 || typeof handles[0] !== 'string' || !handles[0]) throw invalid(`${format} header requires exactly one example.header_handle approval sample`)
+  if (header.text !== undefined) throw invalid(`${format} header cannot contain text`)
+  const sample = getMedia(ctx.db, handles[0])
+  if (!sample) throw invalid(`${format} header approval sample ${handles[0]} was not found`)
+  if (sample.ownerId !== waba.id) throw invalid(`${format} header approval sample must belong to the same WhatsApp Business Account`)
+  if (!isMimeCompatibleWithHeader(format, sample.mimeType)) throw invalid(`${format} header approval sample MIME type ${sample.mimeType} is incompatible with ${format}`)
+}
 const metaTemplate = (template: TemplateRow) => ({ ...template.definition, name: template.name, language: template.language, category: template.definition?.category ?? template.category, status: template.status, id: template.metaTemplateId, parameter_format: template.definition?.parameter_format ?? template.definition?.parameterFormat ?? template.parameterFormat, components: template.components })
 function newTemplate(ctx: Ctx, waba: WabaRow, definition: Record<string, any>): TemplateRow {
   const nameError = validateTemplateName(definition.name)
@@ -22,6 +44,7 @@ function newTemplate(ctx: Ctx, waba: WabaRow, definition: Record<string, any>): 
   if (typeof definition.language !== 'string' || !definition.language) throw invalid('language is required')
   if (typeof definition.category !== 'string' || !definition.category) throw invalid('category is required')
   if (!Array.isArray(definition.components)) throw invalid('components must be an array')
+  validateHeaders(ctx, waba, definition.components)
   const name = definition.name as string
   if (findTemplate(ctx.db, waba.id, name, definition.language)) throw invalid(`Template ${name} (${definition.language}) already exists`)
   const now = ctx.clock.now()
@@ -63,6 +86,7 @@ export const templateHandlers: HandlerMap = {
     const waba = requireWaba(ctx, input.id); const template = findOne(ctx, waba, input)
     const components = input.templateComponents ? parseBlobJson(input.templateComponents, 'templateComponents') : template.components
     if (!Array.isArray(components)) throw invalid('templateComponents must be a JSON array')
+    validateHeaders(ctx, waba, components)
     const category = input.templateCategory?.toUpperCase() ?? template.category
     const parameterFormat = input.parameterFormat?.toUpperCase() ?? template.parameterFormat
     const definition = { ...(template.definition ?? {}), ...(input.templateCategory ? { category: input.templateCategory } : {}), ...(input.parameterFormat ? { parameter_format: input.parameterFormat } : {}), ...(input.templateComponents ? { components } : {}) }
@@ -85,6 +109,8 @@ export const templateHandlers: HandlerMap = {
     const waba = requireWaba(ctx, input.id)
     if (!input.sourceS3File) throw invalid('sourceS3File is required')
     const { bytes, mimeType } = await readS3(ctx, input.sourceS3File)
+    const mediaError = validateMediaUpload(mimeType, bytes)
+    if (mediaError) throw invalid(mediaError)
     const handle = `4::${Buffer.from(mimeType).toString('base64')}:${randomBytes(24).toString('base64url')}`
     insertMedia(ctx.db, { mediaId: handle, ownerId: waba.id, mimeType, sha256: createHash('sha256').update(bytes).digest('base64'), bytes, createdAt: ctx.clock.now() })
     return { metaHeaderHandle: handle }

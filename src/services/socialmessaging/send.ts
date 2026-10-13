@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { HandlerMap } from '../../context.ts'
 import { msisdn, newWamid } from '../../domain/ids.ts'
 import { renderOutbound } from '../../domain/render.ts'
-import { checkTemplateSend } from '../../domain/templates.ts'
+import { checkTemplateSend, resolveDocumentHeader } from '../../domain/templates.ts'
 import { invalid } from '../../smithy/errors.ts'
 import { insertMessage } from '../../store/messages.ts'
 import { findTemplate } from '../../store/templates.ts'
@@ -23,15 +23,24 @@ export const sendHandlers: HandlerMap = {
     if (typeof body.type !== 'string' || !body.type) throw invalid('message must set "type"')
     if (!['text', 'template', 'image', 'document', 'audio', 'video', 'sticker', 'reaction', 'interactive', 'location', 'contacts'].includes(body.type)) throw invalid(`unsupported WhatsApp message type ${body.type}`)
     const template = body.type === 'template' && body.template?.name ? findTemplate(ctx.db, waba.id, String(body.template.name), String(body.template.language?.code ?? '')) : undefined
+    const documentHeader = body.type === 'template' && template?.status === 'APPROVED' ? resolveDocumentHeader(template, body, ctx.db, phone.id) : undefined
     if (body.type === 'template') {
       const templateError = checkTemplateSend(template, body)
       if (templateError?.code === 132001) throw invalid(`WhatsApp template send rejected (${templateError.code}): ${templateError.title}`)
     }
     const wamid = newWamid()
+    const awsMessageId = ctx.config.messageIdMode === 'wamid' ? wamid : randomUUID()
     const message: MessageRow = {
-      wamid, awsMessageId: ctx.config.messageIdMode === 'wamid' ? wamid : randomUUID(), phoneNumberId: phone.id,
+      wamid, awsMessageId, phoneNumberId: phone.id,
       direction: 'out', peer, type: body.type, body, renderedText: renderOutbound(body, template),
       category: body.type === 'template' ? (template?.category.toLowerCase() ?? 'utility') : 'service', status: 'accepted', createdAt: ctx.clock.now(),
+      trace: {
+        operation: 'SendWhatsAppMessage',
+        request: redactTrace({ originationPhoneNumberId: input.originationPhoneNumberId, metaApiVersion: input.metaApiVersion, message: body }),
+        response: { messageId: awsMessageId },
+        ...(template ? { template: { name: template.name, language: template.language, generation: template.generation, headerFormat: template.components.find((component) => String(component.type).toUpperCase() === 'HEADER')?.format, components: template.components } } : {}),
+        ...(documentHeader ? { mediaValidation: { result: 'valid' as const, mediaId: documentHeader.media.mediaId, filename: documentHeader.filename, mimeType: documentHeader.media.mimeType, size: documentHeader.media.bytes.byteLength, sha256: documentHeader.media.sha256 } } : {}),
+      },
     }
     const outcome = ctx.sim.decide(message, template)
     if (outcome.requestError) throw outcome.requestError
@@ -40,4 +49,11 @@ export const sendHandlers: HandlerMap = {
     ctx.sim.onSend(message, template, outcome)
     return { messageId: message.awsMessageId }
   },
+}
+
+function redactTrace(value: unknown, key = ''): any {
+  if (/authorization|auth.?token|bearer|credential|secret|password|session.?token|access.?token|api.?key/i.test(key)) return '[redacted]'
+  if (Array.isArray(value)) return value.map((item) => redactTrace(item))
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([childKey, child]) => [childKey, redactTrace(child, childKey)]))
+  return value
 }
